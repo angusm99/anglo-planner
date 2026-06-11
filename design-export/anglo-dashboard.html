@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anglo Windows — W.I.P dashboard (design reference)</title>
+<style>
+:root,
+:root[data-theme="dark"] {
+  --bg: #14130f;
+  --surface: #1d1b16;
+  --surface-2: #24221b;
+  --fg: #f3f1e9;
+  --muted: #a5a191;
+  --border: #36332a;
+  --accent: #f0c419;
+  --accent-ink: #14130f;
+  --accent-dim: rgba(240, 196, 25, 0.16);
+  --done: #3cc796;  --done-bg: rgba(29, 158, 117, 0.16);
+  --prog: #f2b13d;  --prog-bg: rgba(239, 159, 39, 0.14);
+  --queue: #9b988c; --queue-bg: rgba(180, 178, 169, 0.13);
+  --bad: #ff7a72;   --bad-bg: rgba(226, 75, 74, 0.16);
+  --dot-done: #2bb387; --dot-prog: #efa027; --dot-queue: #6e6b60; --dot-bad: #ef5f55;
+  --radius: 12px;
+  --font-body: "Segoe UI Variable", "Segoe UI", Inter, system-ui, sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #fbfaf6; --surface: #ffffff; --surface-2: #f5f4ee;
+  --fg: #1b1a16; --muted: #6e6c63; --border: #ddDBd2;
+  --accent: #f0c419; --accent-ink: #2e2607; --accent-dim: rgba(240, 196, 25, 0.22);
+  --done: #0F6E56;  --done-bg: #E1F5EE;
+  --prog: #854F0B;  --prog-bg: #FAEEDA;
+  --queue: #5F5E5A; --queue-bg: #F1EFE8;
+  --bad: #A32D2D;   --bad-bg: #FCEBEB;
+  --dot-done: #1D9E75; --dot-prog: #EF9F27; --dot-queue: #B4B2A9; --dot-bad: #E24B4A;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; min-height: 100vh; }
+header.app { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--surface); border-bottom: 2px solid var(--accent); }
+header.app .brand { display: flex; align-items: center; gap: 12px; }
+header.app .mark { width: 36px; height: 36px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+header.app h1 { font-size: 18px; font-weight: 600; }
+header.app .sub { font-size: 13px; color: var(--muted); }
+header.app .right { display: flex; align-items: center; gap: 14px; }
+header.app .clock { font-size: 15px; color: var(--muted); }
+button.theme { background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 13px; padding: 6px 12px; cursor: pointer; font-family: var(--font-body); }
+main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px 16px; }
+.pill { display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.pill.done { background: var(--done-bg); color: var(--done); }
+.pill.prog { background: var(--prog-bg); color: var(--prog); }
+.pill.queue { background: var(--queue-bg); color: var(--queue); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
+.dot.done { background: var(--dot-done); } .dot.prog { background: var(--dot-prog); }
+.dot.queue { background: var(--dot-queue); } .dot.bad { background: var(--dot-bad); }
+.dots { display: inline-flex; gap: 6px; }
+table.jobs { width: 100%; border-collapse: collapse; }
+table.jobs th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); padding: 8px 10px; }
+table.jobs td { padding: 12px 10px; border-top: 1px solid var(--border); font-size: 16px; }
+table.jobs td.ref { font-weight: 700; }
+table.jobs tr.flash td { background: var(--accent-dim); }
+table.jobs tr.flash td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.metric .label { font-size: 13px; color: var(--muted); }
+.metric .value { font-size: 32px; font-weight: 700; margin-top: 2px; }
+.metric .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.metric.alert { background: var(--bad-bg); border-color: var(--bad); }
+.metric.alert .label, .metric.alert .value { color: var(--bad); }
+.legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); padding: 10px 4px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>W.I.P dashboard</h1>
+      <div class="sub">Live — updates the moment a station taps</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" onclick="const h=document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark'; this.textContent = h.dataset.theme==='dark'?'Light':'Dark';">Light</button>
+    <div class="clock">Thu, 11 Jun, 09:47</div>
+  </div>
+</header>
+<main>
+  <div class="metrics">
+    <div class="metric"><div class="label">Active jobs</div><div class="value">140</div></div>
+    <div class="metric"><div class="label">Due in next 7 days</div><div class="value">12</div></div>
+    <div class="metric"><div class="label">In assembly</div><div class="value">19</div></div>
+    <div class="metric"><div class="label">All ready</div><div class="value">25</div></div>
+    <div class="metric alert"><div class="label">Shorts / changes</div><div class="value">3</div><div class="hint">click to locate ↓</div></div>
+  </div>
+
+  <div class="card">
+    <div class="legend">
+      <span>Stations 1–7 — hover for status, click a dot to open that station:</span>
+      <span><span class="dot done"></span> done</span>
+      <span><span class="dot prog"></span> in progress</span>
+      <span><span class="dot queue"></span> queued</span>
+      <span><span class="dot bad"></span> short / changes</span>
+    </div>
+    <table class="jobs">
+      <thead>
+        <tr><th style="width:80px;">Ref</th><th>Customer</th><th style="width:90px;">Install</th><th style="width:100px;">Colour</th><th style="width:200px;">Stations 1–7</th><th style="width:140px;">Job status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="ref">D1038</td><td>Stephan Erlank - Franskraal - Glass Roof</td><td>28 Apr</td><td>BRONZE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot queue"></span><span class="dot prog"></span><span class="dot prog"></span><span class="dot done"></span></span></td>
+          <td><span class="pill done">GLASS READY</span></td></tr>
+        <tr><td class="ref">D1066</td><td>Louis Classen - House Trautmann</td><td>28 Apr</td><td>NAT PC</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot prog"></span></span></td>
+          <td><span class="pill prog">SCHEDULED</span></td></tr>
+        <tr><td class="ref">D1347</td><td>91 Kenilworth Village - Julie Summers</td><td>28 Apr</td><td>WHITE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span></span></td>
+          <td><span class="pill done">ALL READY</span></td></tr>
+        <tr class="flash"><td class="ref">D1740</td><td>Kobie Conradie - Bellville</td><td>18 May</td><td>BRONZE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot bad"></span><span class="dot prog"></span><span class="dot queue"></span><span class="dot queue"></span></span></td>
+          <td><span class="pill bad">PICK SHORT</span></td></tr>
+        <tr><td class="ref">D1660</td><td>Anton Vos - Kleinbaai</td><td>28 Apr</td><td>WHITE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot prog"></span><span class="dot done"></span><span class="dot done"></span></span></td>
+          <td><span class="pill prog">BEADS DONE</span></td></tr>
+        <tr><td class="ref">C6910</td><td>Estelle Court Unit 10 - Strand - Residentia Trust</td><td>29 Apr</td><td>BRONZE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span><span class="dot done"></span></span></td>
+          <td><span class="pill done">GLASS READY</span></td></tr>
+        <tr><td class="ref">D1654</td><td>Yoga Life - De Waterkant - IPS</td><td>19 May</td><td>WHITE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot prog"></span><span class="dot queue"></span><span class="dot queue"></span><span class="dot queue"></span><span class="dot queue"></span></span></td>
+          <td><span class="pill queue">QUEUE OUT</span></td></tr>
+        <tr><td class="ref">D1659</td><td>Jan Van Dyk - Vredekloof</td><td>19 May</td><td>WHITE</td>
+          <td><span class="dots"><span class="dot done"></span><span class="dot done"></span><span class="dot bad"></span><span class="dot bad"></span><span class="dot queue"></span><span class="dot queue"></span><span class="dot queue"></span></span></td>
+          <td><span class="pill queue">QUEUE OUT</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

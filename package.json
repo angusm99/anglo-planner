@@ -1,0 +1,11 @@
+{
+  "name": "anglo-planner",
+  "version": "0.1.0",
+  "description": "Anglo Windows production floor planner — station tablets + live W.I.P dashboard",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "import": "node tools/import.js",
+    "test": "node --test tests/cascade.test.js"
+  }
+}

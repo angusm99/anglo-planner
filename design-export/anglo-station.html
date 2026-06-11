@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anglo Windows — Station screen (design reference)</title>
+<style>
+:root,
+:root[data-theme="dark"] {
+  --bg: #14130f;
+  --surface: #1d1b16;
+  --surface-2: #24221b;
+  --fg: #f3f1e9;
+  --muted: #a5a191;
+  --border: #36332a;
+  --accent: #f0c419;
+  --accent-ink: #14130f;
+  --accent-dim: rgba(240, 196, 25, 0.16);
+  --done: #3cc796;  --done-bg: rgba(29, 158, 117, 0.16);
+  --prog: #f2b13d;  --prog-bg: rgba(239, 159, 39, 0.14);
+  --queue: #9b988c; --queue-bg: rgba(180, 178, 169, 0.13);
+  --bad: #ff7a72;   --bad-bg: rgba(226, 75, 74, 0.16);
+  --radius: 12px;
+  --font-body: "Segoe UI Variable", "Segoe UI", Inter, system-ui, sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #fbfaf6; --surface: #ffffff; --surface-2: #f5f4ee;
+  --fg: #1b1a16; --muted: #6e6c63; --border: #dddbd2;
+  --accent: #f0c419; --accent-ink: #2e2607; --accent-dim: rgba(240, 196, 25, 0.22);
+  --done: #0F6E56; --done-bg: #E1F5EE;
+  --prog: #854F0B; --prog-bg: #FAEEDA;
+  --queue: #5F5E5A; --queue-bg: #F1EFE8;
+  --bad: #A32D2D; --bad-bg: #FCEBEB;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; min-height: 100vh; }
+header.app { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--surface); border-bottom: 2px solid var(--accent); }
+header.app .brand { display: flex; align-items: center; gap: 12px; }
+header.app .mark { width: 36px; height: 36px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+header.app h1 { font-size: 18px; font-weight: 600; }
+header.app .sub { font-size: 13px; color: var(--muted); }
+header.app .right { display: flex; align-items: center; gap: 14px; }
+header.app .clock { font-size: 15px; color: var(--muted); }
+button.theme { background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 13px; padding: 6px 12px; cursor: pointer; font-family: var(--font-body); }
+main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.pill { display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.pill.queue { background: var(--queue-bg); color: var(--queue); }
+button.big { min-height: 76px; padding: 14px 10px; font-size: 19px; font-weight: 600; font-family: var(--font-body); border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--surface-2); color: var(--fg); cursor: pointer; }
+button.big:hover { border-color: var(--accent); }
+button.big:active { transform: scale(0.97); background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--accent); color: var(--accent-ink); padding: 14px 22px; border-radius: 10px; font-size: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">6</div>
+    <div>
+      <h1>Station 6 — Assembly</h1>
+      <div class="sub">Responsible: Portia</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" onclick="const h=document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark'; this.textContent = h.dataset.theme==='dark'?'Light':'Dark';">Light</button>
+    <div class="clock">Thu, 11 Jun, 09:47</div>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
+          <span style="font-size:34px; font-weight:700;">D1738</span>
+          <span style="font-size:17px; color:var(--muted);">Riaan Diedericks - Durbanville</span>
+        </div>
+        <div style="margin-top:6px; color:var(--muted); font-size:15px;">Install 13 May · BRONZE · task 526889 · glasslist</div>
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="pill queue">1 windows</span>
+          <span class="pill queue">2 hinged</span>
+          <span class="pill queue">5 folding</span>
+        </div>
+      </div>
+      <button class="big" style="min-height:52px; font-size:15px;">Next job ⟶</button>
+    </div>
+
+    <div style="margin:18px 0 10px; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:14px; color:var(--muted);">This station now:</span>
+      <span class="pill queue">QUEUED</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;">
+      <button class="big">WINDOWS DONE</button>
+      <button class="big">S-FRONT DONE</button>
+      <button class="big">SLIDERS DONE</button>
+      <button class="big">ALL DONE</button>
+    </div>
+    <p style="margin-top:14px; font-size:14px; color:var(--muted);">Also updated: Job status → FRAMES+BEADS</p>
+  </section>
+</main>
+<div class="toast">Saved ✓  WINDOWS DONE</div>
+</body>
+</html>

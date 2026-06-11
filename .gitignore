@@ -1,0 +1,5 @@
+data/planner.db
+data/planner.db-shm
+data/planner.db-wal
+data/import.json
+node_modules/

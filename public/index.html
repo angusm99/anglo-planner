@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anglo Windows — Production planner</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>Anglo Windows production planner</h1>
+      <div class="sub">Pick a screen — tablets get pinned to their station link</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+<main>
+  <div class="card" style="margin-bottom:16px;">
+    <h2 style="font-size:16px; margin-bottom:12px;">Floor stations</h2>
+    <div id="stations" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;"></div>
+  </div>
+  <div class="card">
+    <h2 style="font-size:16px; margin-bottom:12px;">Office</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+      <button class="big" onclick="location.href='/dashboard'">W.I.P dashboard<br><span style="font-size:13px;font-weight:400;color:var(--muted)">Live jobs due — wall TV / office</span></button>
+    </div>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+startClock(document.getElementById("clock"));
+document.getElementById("themeBtn").textContent = themeButtonLabel();
+fetch("/api/stations").then(r => r.json()).then(stations => {
+  const wrap = document.getElementById("stations");
+  for (const [num, st] of Object.entries(stations)) {
+    const b = document.createElement("button");
+    b.className = "big";
+    b.innerHTML = `Station ${num} — ${esc(st.name)}<br><span style="font-size:13px;font-weight:400;color:var(--muted)">${esc(st.responsible)}</span>`;
+    b.onclick = () => location.href = `/station/${num}`;
+    wrap.appendChild(b);
+  }
+});
+</script>
+</body>
+</html>

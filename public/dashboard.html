@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W.I.P dashboard — Anglo planner</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>W.I.P dashboard</h1>
+      <div class="sub">Live — updates the moment a station taps</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+<main style="max-width:1280px;">
+  <div class="metrics" id="metrics" style="margin-bottom:16px;"></div>
+
+  <div class="card" style="padding:10px 16px 16px;">
+    <div style="display:flex; gap:16px; font-size:13px; color:var(--muted); padding:10px 4px; align-items:center; flex-wrap:wrap;">
+      <span>Stations 1–7 — hover for status, click a dot to open that station:</span>
+      <span><span class="dot done"></span> done</span>
+      <span><span class="dot prog"></span> in progress</span>
+      <span><span class="dot queue"></span> queued</span>
+      <span><span class="dot bad"></span> short / changes</span>
+    </div>
+    <table class="jobs">
+      <thead>
+        <tr>
+          <th style="width:80px;">Ref</th>
+          <th>Customer</th>
+          <th style="width:90px;">Install</th>
+          <th style="width:100px;">Colour</th>
+          <th style="width:200px;">Stations 1–7</th>
+          <th style="width:140px;">Job status</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" style="display:none; padding:20px; color:var(--muted);">No active jobs in range.</p>
+  </div>
+</main>
+
+<script src="/common.js"></script>
+<script>
+startClock(document.getElementById("clock"));
+document.getElementById("themeBtn").textContent = themeButtonLabel();
+
+let STATIONS = {};
+fetch("/api/stations").then(r => r.json()).then(s => { STATIONS = s; refresh(); });
+
+let badIdx = -1;
+
+async function refresh() {
+  const days = new URLSearchParams(location.search).get("days") || "";
+  const jobs = await fetch("/api/jobs" + (days ? "?days=" + days : "")).then(r => r.json());
+  const today = todayISO();
+  const weekEnd = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+
+  const isBad = (j) =>
+    [j.s1, j.s2, j.s3, j.s4, j.s5, j.s6, j.s7, j.job_status].some(v => classify(v) === "bad");
+
+  const dueWeek = jobs.filter(j => j.install_date >= today && j.install_date <= weekEnd).length;
+  const inAssembly = jobs.filter(j => classify(j.s6) === "prog").length;
+  const allReady = jobs.filter(j => (j.job_status || "").toUpperCase() === "ALL READY").length;
+  const shorts = jobs.filter(isBad).length;
+
+  document.getElementById("metrics").innerHTML = `
+    <div class="metric"><div class="label">Active jobs</div><div class="value">${jobs.length}</div></div>
+    <div class="metric"><div class="label">Due in next 7 days</div><div class="value">${dueWeek}</div></div>
+    <div class="metric"><div class="label">In assembly</div><div class="value">${inAssembly}</div></div>
+    <div class="metric"><div class="label">All ready</div><div class="value">${allReady}</div></div>
+    <div class="metric ${shorts ? "alert clickable" : ""}" ${shorts ? 'onclick="cycleShorts()" title="Click to jump to the next short/change"' : ""}>
+      <div class="label">Shorts / changes</div><div class="value">${shorts}</div>
+      ${shorts ? '<div class="hint" id="shortsHint">click to locate ↓</div>' : ""}
+    </div>`;
+
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = jobs.map(j => {
+    const dots = [j.s1, j.s2, j.s3, j.s4, j.s5, j.s6, j.s7].map((v, i) => {
+      const st = STATIONS[i + 1] || { name: "Station " + (i + 1) };
+      const display = v && String(v).trim() !== "0" ? v : "—";
+      const label = `Station ${i + 1} — ${st.name}: ${display}`;
+      return `<a class="dot ${classify(v)}" href="/station/${i + 1}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
+    }).join(" ");
+    const js = (j.job_status || "").trim();
+    return `<tr data-bad="${isBad(j) ? 1 : 0}" class="${j.install_date === today ? "due-today" : ""}">
+      <td class="ref">${esc(j.biz_ref || j.task_no)}</td>
+      <td>${esc(j.customer)}</td>
+      <td>${fmtDate(j.install_date)}</td>
+      <td>${esc(j.colour)}</td>
+      <td><span style="display:inline-flex; gap:6px;">${dots}</span></td>
+      <td><span class="pill ${classify(js)}">${esc(js || "—")}</span></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("empty").style.display = jobs.length ? "none" : "block";
+}
+
+function cycleShorts() {
+  const badRows = [...document.querySelectorAll('#rows tr[data-bad="1"]')];
+  if (!badRows.length) return;
+  badIdx = (badIdx + 1) % badRows.length;
+  const tr = badRows[badIdx];
+  document.querySelectorAll("#rows tr.flash").forEach(r => r.classList.remove("flash"));
+  tr.scrollIntoView({ behavior: "smooth", block: "center" });
+  tr.classList.add("flash");
+  setTimeout(() => tr.classList.remove("flash"), 2500);
+  const hint = document.getElementById("shortsHint");
+  if (hint) hint.textContent = `${badIdx + 1} of ${badRows.length} — click for next`;
+}
+
+setInterval(refresh, 60000);
+const es = new EventSource("/api/stream");
+es.addEventListener("job-updated", refresh);
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Station — Anglo planner</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark" id="stNum">·</div>
+    <div>
+      <h1 id="stName">Station</h1>
+      <div class="sub" id="stWho"></div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+<main>
+  <section id="scanView" class="card">
+    <h2 style="font-size:17px; margin-bottom:6px;">Scan the job cover, or type the ref</h2>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:14px;">Bizman ref (e.g. D1738) or task no (e.g. 526889), then press Go.</p>
+    <form id="refForm" style="display:flex; gap:10px;">
+      <input class="ref" id="refInput" autocomplete="off" autofocus placeholder="D1738">
+      <button class="big" type="submit" style="min-width:120px;">Go</button>
+    </form>
+    <div id="matches" style="margin-top:14px; display:grid; gap:10px;"></div>
+  </section>
+
+  <section id="jobView" class="card" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
+          <span id="jobRef" style="font-size:34px; font-weight:700;"></span>
+          <span id="jobCustomer" style="font-size:17px; color:var(--muted);"></span>
+        </div>
+        <div id="jobMeta" style="margin-top:6px; color:var(--muted); font-size:15px;"></div>
+        <div id="jobChips" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
+      <button class="big" id="backBtn" style="min-height:52px; font-size:15px;">Next job ⟶</button>
+    </div>
+
+    <div style="margin:18px 0 10px; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:14px; color:var(--muted);">This station now:</span>
+      <span class="pill queue" id="currentVal">—</span>
+    </div>
+
+    <div id="buttons" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;"></div>
+    <p id="cascadeNote" style="margin-top:14px; font-size:14px; color:var(--muted);"></p>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/common.js"></script>
+<script>
+const stationNum = location.pathname.split("/")[2];
+let stationCfg = null;
+let job = null;
+
+const $ = (id) => document.getElementById(id);
+startClock($("clock"));
+$("themeBtn").textContent = themeButtonLabel();
+
+fetch("/api/stations").then(r => r.json()).then(all => {
+  stationCfg = all[stationNum];
+  if (!stationCfg) { $("stName").textContent = "Unknown station"; return; }
+  $("stNum").textContent = stationNum;
+  $("stName").textContent = `Station ${stationNum} — ${stationCfg.name}`;
+  $("stWho").textContent = `Responsible: ${stationCfg.responsible}`;
+});
+
+$("refForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ref = $("refInput").value.trim();
+  if (!ref) return;
+  const matches = await fetch(`/api/lookup?ref=${encodeURIComponent(ref)}`).then(r => r.json());
+  if (matches.length === 0) {
+    toast(`No job found for "${ref.toUpperCase()}"`);
+  } else if (matches.length === 1) {
+    showJob(matches[0]);
+  } else {
+    const wrap = $("matches");
+    wrap.innerHTML = "";
+    for (const m of matches) {
+      const b = document.createElement("button");
+      b.className = "big";
+      b.style.textAlign = "left";
+      b.innerHTML = `${esc(m.biz_ref)} — ${esc(m.customer)}<br><span style="font-size:13px;font-weight:400;color:var(--muted)">Install ${fmtDate(m.install_date)} · ${esc(m.source_tab)}</span>`;
+      b.onclick = () => showJob(m);
+      wrap.appendChild(b);
+    }
+  }
+});
+
+function showJob(j) {
+  job = j;
+  $("scanView").style.display = "none";
+  $("jobView").style.display = "block";
+  $("jobRef").textContent = j.biz_ref || j.task_no;
+  $("jobCustomer").textContent = j.customer;
+  $("jobMeta").textContent =
+    `Install ${fmtDate(j.install_date)} · ${j.colour || "no colour"} · task ${j.task_no || "—"}` +
+    (j.glasslist ? " · glasslist" : "");
+  $("jobChips").innerHTML = qtyChips(j).map(c => `<span class="pill queue">${esc(c)}</span>`).join("");
+  renderCurrent(j);
+  renderButtons();
+  $("cascadeNote").textContent = "";
+}
+
+function renderCurrent(j) {
+  const v = j["s" + stationNum] || "—";
+  const el = $("currentVal");
+  el.textContent = v === "" ? "—" : v;
+  el.className = "pill " + classify(v);
+}
+
+function renderButtons() {
+  const wrap = $("buttons");
+  wrap.innerHTML = "";
+  for (const val of stationCfg.buttons) {
+    const b = document.createElement("button");
+    b.className = "big";
+    b.textContent = val;
+    b.onclick = () => submit(val, b);
+    wrap.appendChild(b);
+  }
+}
+
+async function submit(value, btn) {
+  for (const b of $("buttons").children) b.disabled = true;
+  const res = await fetch("/api/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jobId: job.id, station: Number(stationNum), value,
+      actor: stationCfg.responsible, source: "station-" + stationNum,
+    }),
+  }).then(r => r.json());
+
+  if (res.error) { toast("Error: " + res.error); return; }
+  job = res.job;
+  renderCurrent(job);
+  for (const b of $("buttons").children) b.disabled = false;
+
+  const others = res.applied.filter(c => c.field !== "s" + stationNum);
+  const names = { s1: "Planning", s2: "Material control", s3: "Despatch", s4: "Saw 1", s5: "Saw 2", s6: "Assembly", s7: "Glass", job_status: "Job status" };
+  $("cascadeNote").textContent = others.length
+    ? "Also updated: " + others.map(c => `${names[c.field]} → ${c.to}`).join(", ")
+    : "";
+  toast(`Saved ✓  ${value}`);
+  setTimeout(backToScan, 6000);
+}
+
+function backToScan() {
+  $("jobView").style.display = "none";
+  $("scanView").style.display = "block";
+  $("matches").innerHTML = "";
+  $("refInput").value = "";
+  $("refInput").focus();
+}
+$("backBtn").onclick = backToScan;
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+</script>
+</body>
+</html>

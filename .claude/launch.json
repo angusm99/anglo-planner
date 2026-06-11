@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "anglo-planner",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/server.js"],
+      "cwd": "C:\\Users\\angusm\\CLAUDE MASTER\\anglo-planner",
+      "port": 3300
+    }
+  ]
+}
