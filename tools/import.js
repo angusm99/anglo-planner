@@ -20,15 +20,26 @@ function tabRank(tab) {
   return Number(y) * 100 + (MONTHS.indexOf(m) + 1);
 }
 
+function isHeaderRow(r) {
+  return String(r.biz_ref || "").trim().toUpperCase() === "BIZ REF" ||
+    String(r.customer || "").trim() === "CUSTOMER";
+}
+
 const byKey = new Map();
 for (const r of records) {
+  if (isHeaderRow(r)) continue;
   const key = r.task_no || `ref:${r.biz_ref}`;
   const prev = byKey.get(key);
   if (!prev || tabRank(r.source_tab) >= tabRank(prev.source_tab)) byKey.set(key, r);
 }
 
 const db = open();
-db.exec("DELETE FROM events; DELETE FROM jobs;");
+// Replace imported jobs only — jobs added in the office app (source_tab = 'OFFICE')
+// exist nowhere else, so they and their event history survive a re-import.
+db.exec(`
+  DELETE FROM events WHERE job_id IN (SELECT id FROM jobs WHERE source_tab <> 'OFFICE');
+  DELETE FROM jobs WHERE source_tab <> 'OFFICE';
+`);
 const ins = db.prepare(`INSERT INTO jobs
   (task_no, biz_ref, customer, colour, install_date, send_to_dash,
    qty_windows, qty_hinged, qty_folding, qty_palace, qty_specials, qty_elite, glasslist,

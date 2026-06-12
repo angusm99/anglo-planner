@@ -1,8 +1,8 @@
 # Anglo Windows production planner
 
-Phase 1 of the factory-floor planner app: station tablets + live W.I.P dashboard,
-replacing direct edits to the Google Sheets planner. Zero npm dependencies —
-plain Node (v22+) with the built-in SQLite module.
+Factory-floor planner app: station tablets + live W.I.P dashboard + office
+admin, replacing direct edits to the Google Sheets planner. Zero npm
+dependencies — plain Node (v22+) with the built-in SQLite module.
 
 ## Run
 
@@ -14,6 +14,10 @@ node src/server.js
 - Station screens: http://localhost:3300/station/1 … /station/7
 - Live dashboard: http://localhost:3300/dashboard (add `?days=N` to widen/narrow
   the install-date lookback, default 45)
+- Office admin: http://localhost:3300/office — add jobs, set install dates
+  (inline date picker per row), override job status, archive/restore. Undated
+  queue jobs sort first so they get dates. Every change lands in the events
+  audit log.
 
 Each tablet on the floor gets pinned (kiosk mode) to its own station URL.
 
@@ -41,8 +45,10 @@ node tools/import.js
 ```
 
 Reads all monthly tabs (e.g. `MAY-2026`) plus `JOBS IN QUEUE`, dedupes by task
-no (monthly tabs win over the queue, later months win), and **replaces** the
-jobs table. Run it again any time you re-export the sheet.
+no (monthly tabs win over the queue, later months win), and **replaces all
+sheet-imported jobs**. Jobs added in the office app survive a re-import; station
+taps made on imported jobs do not — while parallel-running, the sheet stays the
+source of truth for those.
 
 ## How it works
 
@@ -53,12 +59,16 @@ jobs table. Run it again any time you re-export the sheet.
 | Database | `src/db.js` → `data/planner.db` | `jobs` table mirrors the planner columns; `events` is the audit log (every change: field, old → new, who, which station, when). |
 | Station UI | `public/station.html` | Ref lookup (type or USB/QR scanner acting as keyboard) → one job → only that station's valid status buttons. |
 | Dashboard UI | `public/dashboard.html` | Due-date sorted active jobs, 7 station dots per job, counters, shorts alert. |
+| Office UI | `public/office.html` | Search (ref / task no / customer), add jobs, inline install-date edits, job-status override with suggestions, archive/restore, per-job change history. |
 
 Tests: `npm test` (cascade scenarios, 14 cases).
 
-## Phase 2 (not built yet)
+## Phase 2
 
+Done:
 - Office/admin view: add jobs, edit install dates, send-to-dash, job-status overrides
+
+Still to build:
 - Two-way Google Sheet sync for the parallel-run period (Apps Script → POST /api)
 - Cover-sheet printing with QR codes; camera scanning on tablets
 - Calendar checker sync port; lead-time reports from the events table

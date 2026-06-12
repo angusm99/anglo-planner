@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Office — Anglo planner</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>Office — jobs admin</h1>
+      <div class="sub">Add jobs, set install dates, fix statuses</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" onclick="location.href='/dashboard'">Dashboard</button>
+    <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+<main style="max-width:1280px;">
+
+  <div class="card" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <input class="ref" id="search" placeholder="Search ref, task no or customer…"
+      style="flex:1; min-width:240px; font-size:18px; padding:10px 14px; text-transform:none; letter-spacing:0;">
+    <button class="big" style="min-height:48px; font-size:16px; padding:10px 22px;" onclick="openEditor(null)">+ Add job</button>
+  </div>
+
+  <div class="card" id="editorCard" style="display:none; margin-bottom:16px; border-color:var(--accent);">
+    <h2 id="editorTitle" style="font-size:16px; margin-bottom:14px;"></h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px;">
+      <label class="field">Biz ref *<input id="f_biz_ref" style="text-transform:uppercase;"></label>
+      <label class="field">Task no<input id="f_task_no"></label>
+      <label class="field" style="grid-column:span 2;">Customer<input id="f_customer"></label>
+      <label class="field">Colour<input id="f_colour" style="text-transform:uppercase;"></label>
+      <label class="field">Install date<input id="f_install_date" type="date"></label>
+      <label class="field">Job status<input id="f_job_status" list="statusOptions" style="text-transform:uppercase;"></label>
+      <label class="field">Send to dash<input id="f_send_to_dash" style="text-transform:uppercase;"></label>
+      <label class="field">Windows<input id="f_qty_windows" type="number" min="0"></label>
+      <label class="field">Hinged<input id="f_qty_hinged" type="number" min="0"></label>
+      <label class="field">Folding<input id="f_qty_folding" type="number" min="0"></label>
+      <label class="field">Palace<input id="f_qty_palace" type="number" min="0"></label>
+      <label class="field">Specials<input id="f_qty_specials" type="number" min="0"></label>
+      <label class="field">Elite/Knysna<input id="f_qty_elite" type="number" min="0"></label>
+      <label class="field">Rep<input id="f_rep"></label>
+      <label class="field">Install team<input id="f_install_team"></label>
+      <label class="field" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
+        <input id="f_glasslist" type="checkbox" style="width:20px; height:20px;"> Glasslist
+      </label>
+    </div>
+    <datalist id="statusOptions">
+      <option>SCHEDULED</option><option>QUEUE OUT</option><option>FRAMES-WINDOW</option>
+      <option>WINDOWS DONE</option><option>S-FRONT DONE</option><option>SLIDE-DONE</option>
+      <option>WIN-SHOP DONE</option><option>ALL DONE</option><option>BEADS DONE</option>
+      <option>GLASS READY</option><option>BEADS+GLASS</option><option>FRAMES+BEADS</option>
+      <option>FRAMES+GLASS</option><option>ALL READY</option><option>DONE</option>
+      <option>CHANGES</option><option>PICK SHORT</option>
+    </datalist>
+    <div style="display:flex; gap:10px; margin-top:16px; align-items:center; flex-wrap:wrap;">
+      <button class="big" style="min-height:48px; font-size:16px; padding:10px 26px;" onclick="saveJob()">Save</button>
+      <button class="theme" style="padding:12px 20px; font-size:15px;" onclick="closeEditor()">Cancel</button>
+      <span id="editorMsg" style="color:var(--bad); font-size:14px;"></span>
+    </div>
+    <div id="history" style="margin-top:16px;"></div>
+  </div>
+
+  <div class="card" style="padding:10px 16px 16px;">
+    <table class="jobs">
+      <thead>
+        <tr>
+          <th style="width:90px;">Ref</th>
+          <th style="width:90px;">Task no</th>
+          <th>Customer</th>
+          <th style="width:160px;">Install</th>
+          <th style="width:100px;">Colour</th>
+          <th style="width:150px;">Job status</th>
+          <th style="width:170px;"></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" style="display:none; padding:20px; color:var(--muted);">No jobs match.</p>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/common.js"></script>
+<script>
+startClock(document.getElementById("clock"));
+document.getElementById("themeBtn").textContent = themeButtonLabel();
+
+const FIELDS = ["biz_ref","task_no","customer","colour","install_date","job_status","send_to_dash",
+  "qty_windows","qty_hinged","qty_folding","qty_palace","qty_specials","qty_elite","rep","install_team"];
+let editingId = null;   // null = closed, 0 = new job, >0 = editing that id
+let jobsCache = [];
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+async function refresh() {
+  const q = document.getElementById("search").value;
+  jobsCache = await fetch("/api/search?q=" + encodeURIComponent(q)).then(r => r.json());
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = jobsCache.map(j => {
+    const js = (j.job_status || "").trim();
+    const archived = j.active === 0;
+    return `<tr style="${archived ? "opacity:0.45;" : ""}">
+      <td class="ref">${esc(j.biz_ref || "—")}${archived ? ' <span style="font-size:11px;color:var(--muted);">archived</span>' : ""}</td>
+      <td>${esc(j.task_no || "—")}</td>
+      <td>${esc(j.customer)}</td>
+      <td><input type="date" value="${esc(j.install_date || "")}" onchange="quickDate(${j.id}, this.value)"
+        style="background:var(--surface-2); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-family:var(--font-body); font-size:14px;"></td>
+      <td>${esc(j.colour)}</td>
+      <td><span class="pill ${classify(js)}">${esc(js || "—")}</span></td>
+      <td style="white-space:nowrap; text-align:right;">
+        <button class="theme" style="padding:7px 14px;" onclick="openEditor(${j.id})">Edit</button>
+        <button class="theme" style="padding:7px 14px;" onclick="setActive(${j.id}, ${archived ? 1 : 0})">${archived ? "Restore" : "Archive"}</button>
+      </td>
+    </tr>`;
+  }).join("");
+  document.getElementById("empty").style.display = jobsCache.length ? "none" : "block";
+}
+
+async function quickDate(id, value) {
+  const r = await fetch("/api/jobs/" + id, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ install_date: value, actor: "office" }),
+  }).then(r => r.json());
+  if (r.error) { toast("⚠ " + r.error); return; }
+  toast("Install date saved ✓");
+  refresh();
+}
+
+async function setActive(id, active) {
+  if (!active && !confirm("Archive this job? It disappears from the dashboard and station lookups.")) return;
+  await fetch("/api/jobs/" + id, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active, actor: "office" }),
+  });
+  toast(active ? "Job restored ✓" : "Job archived ✓");
+  refresh();
+}
+
+function openEditor(id) {
+  editingId = id === null ? 0 : id;
+  const job = id ? jobsCache.find(j => j.id === id) : null;
+  document.getElementById("editorTitle").textContent =
+    job ? `Edit ${job.biz_ref || job.task_no}` : "Add a new job";
+  for (const f of FIELDS) {
+    const el = document.getElementById("f_" + f);
+    el.value = job && job[f] != null ? job[f] : "";
+  }
+  document.getElementById("f_glasslist").checked = !!(job && job.glasslist);
+  document.getElementById("editorMsg").textContent = "";
+  document.getElementById("editorCard").style.display = "block";
+  loadHistory(id);
+  document.getElementById("editorCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("f_biz_ref").focus();
+}
+
+function closeEditor() {
+  editingId = null;
+  document.getElementById("editorCard").style.display = "none";
+}
+
+async function loadHistory(id) {
+  const wrap = document.getElementById("history");
+  if (!id) { wrap.innerHTML = ""; return; }
+  const events = await fetch("/api/events/" + id).then(r => r.json());
+  if (!events.length) { wrap.innerHTML = ""; return; }
+  wrap.innerHTML = `<div style="font-size:13px; color:var(--muted); margin-bottom:6px;">History</div>` +
+    events.slice(0, 12).map(e =>
+      `<div style="font-size:13px; color:var(--muted); padding:3px 0; border-top:1px solid var(--border);">
+        <strong style="color:var(--fg);">${esc(e.field)}</strong>:
+        ${esc(e.old_value || "—")} → <strong style="color:var(--fg);">${esc(e.new_value || "—")}</strong>
+        <span style="float:right;">${esc(e.source)} · ${esc(e.created_at)}</span>
+      </div>`).join("");
+}
+
+async function saveJob() {
+  const body = { actor: "office" };
+  for (const f of FIELDS) body[f] = document.getElementById("f_" + f).value;
+  body.glasslist = document.getElementById("f_glasslist").checked;
+
+  const isNew = editingId === 0;
+  const r = await fetch(isNew ? "/api/jobs" : "/api/jobs/" + editingId, {
+    method: isNew ? "POST" : "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(r => r.json());
+
+  if (r.error) { document.getElementById("editorMsg").textContent = "⚠ " + r.error; return; }
+  toast(isNew ? `Job ${r.job.biz_ref} added ✓` : "Saved ✓");
+  closeEditor();
+  refresh();
+}
+
+document.getElementById("search").addEventListener("input", () => {
+  clearTimeout(window._searchT);
+  window._searchT = setTimeout(refresh, 250);
+});
+
+refresh();
+</script>
+</body>
+</html>
