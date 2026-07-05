@@ -133,19 +133,25 @@ function renderButtons() {
 
 async function submit(value, btn) {
   for (const b of $("buttons").children) b.disabled = true;
-  const res = await fetch("/api/update", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jobId: job.id, station: Number(stationNum), value,
-      actor: stationCfg.responsible, source: "station-" + stationNum,
-    }),
-  }).then(r => r.json());
+  let res;
+  try {
+    res = await fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jobId: job.id, station: Number(stationNum), value,
+        actor: stationCfg.responsible, source: "station-" + stationNum,
+      }),
+    }).then(r => r.json());
+  } catch (err) {
+    res = { error: "No connection — check WiFi and try again" };
+  } finally {
+    for (const b of $("buttons").children) b.disabled = false;
+  }
 
   if (res.error) { toast("Error: " + res.error); return; }
   job = res.job;
   renderCurrent(job);
-  for (const b of $("buttons").children) b.disabled = false;
 
   const others = res.applied.filter(c => c.field !== "s" + stationNum);
   const names = { s1: "Planning", s2: "Material control", s3: "Despatch", s4: "Saw 1", s5: "Saw 2", s6: "Assembly", s7: "Glass", job_status: "Job status" };

@@ -31,7 +31,9 @@ function classify(v) {
 function fmtDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
+  const opts = { day: "numeric", month: "short" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-ZA", opts);
 }
 
 function todayISO() {

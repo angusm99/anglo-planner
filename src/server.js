@@ -23,8 +23,19 @@ const sseClients = new Set();
 
 function broadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of sseClients) res.write(payload);
+  for (const res of sseClients) {
+    if (res.writableEnded || res.destroyed) { sseClients.delete(res); continue; }
+    res.write(payload);
+  }
 }
+
+// Keep-alive comment so idle dashboard connections aren't dropped by the OS/browser.
+setInterval(() => {
+  for (const res of sseClients) {
+    if (res.writableEnded || res.destroyed) { sseClients.delete(res); continue; }
+    res.write(": ping\n\n");
+  }
+}, 25000).unref();
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -36,17 +47,21 @@ function readBody(req) {
     let buf = "";
     req.on("data", (c) => {
       buf += c;
-      if (buf.length > 1e6) reject(new Error("body too large"));
+      if (buf.length > 1e6) {
+        req.destroy();
+        reject(new Error("body too large"));
+      }
     });
     req.on("end", () => {
       try { resolve(buf ? JSON.parse(buf) : {}); } catch (e) { reject(e); }
     });
+    req.on("error", reject);
   });
 }
 
 const JOB_COLS = `id, task_no, biz_ref, customer, colour, install_date, send_to_dash,
   qty_windows, qty_hinged, qty_folding, qty_palace, qty_specials, qty_elite, glasslist,
-  s1, s2, s3, s4, s5, s6, s7, job_status, install_team, rep, source_tab, updated_at`;
+  s1, s2, s3, s4, s5, s6, s7, job_status, install_team, rep, source_tab, active, updated_at`;
 
 function getJob(id) {
   return db.prepare(`SELECT ${JOB_COLS} FROM jobs WHERE id = ?`).get(id);
@@ -106,13 +121,13 @@ function searchJobs(q) {
   if (!term) {
     // Office default list: undated jobs first (they need dates), then newest
     return db.prepare(
-      `SELECT ${JOB_COLS}, active FROM jobs WHERE active = 1
+      `SELECT ${JOB_COLS} FROM jobs WHERE active = 1
        ORDER BY install_date IS NOT NULL, install_date DESC LIMIT 100`
     ).all();
   }
   const like = `%${term}%`;
   return db.prepare(
-    `SELECT ${JOB_COLS}, active FROM jobs
+    `SELECT ${JOB_COLS} FROM jobs
      WHERE UPPER(biz_ref) LIKE ? OR UPPER(task_no) LIKE ? OR UPPER(customer) LIKE ?
      ORDER BY active DESC, install_date IS NULL, install_date DESC LIMIT 50`
   ).all(like, like, like);
@@ -151,10 +166,7 @@ function editJob(id, body) {
   for (const field of EDITABLE_FIELDS) {
     if (!(field in body)) continue;
     const newValue = cleanField(field, body[field]);
-    const oldRow = field === "active"
-      ? db.prepare("SELECT active FROM jobs WHERE id = ?").get(id).active
-      : job[field];
-    const oldCmp = oldRow == null ? "" : String(oldRow);
+    const oldCmp = job[field] == null ? "" : String(job[field]);
     const newCmp = newValue == null ? "" : String(newValue);
     if (oldCmp === newCmp) continue;
     db.prepare(`UPDATE jobs SET ${field} = ?, updated_at = datetime('now','localtime') WHERE id = ?`)
@@ -261,11 +273,15 @@ const server = http.createServer(async (req, res) => {
     if (p === "/dashboard") file = "/dashboard.html";
     if (p === "/office") file = "/office.html";
     const full = path.join(PUBLIC_DIR, path.normalize(file));
-    if (!full.startsWith(PUBLIC_DIR) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
+    if (!full.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
       res.writeHead(404, { "Content-Type": "text/plain" });
       return res.end("Not found");
     }
-    res.writeHead(200, { "Content-Type": MIME[path.extname(full)] || "application/octet-stream" });
+    res.writeHead(200, {
+      "Content-Type": MIME[path.extname(full)] || "application/octet-stream",
+      // Tablets must revalidate so UI updates land without a manual cache clear
+      "Cache-Control": "no-cache",
+    });
     fs.createReadStream(full).pipe(res);
   } catch (err) {
     json(res, 500, { error: String(err.message || err) });

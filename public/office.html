@@ -108,7 +108,12 @@ function toast(msg) {
 
 async function refresh() {
   const q = document.getElementById("search").value;
-  jobsCache = await fetch("/api/search?q=" + encodeURIComponent(q)).then(r => r.json());
+  try {
+    jobsCache = await fetch("/api/search?q=" + encodeURIComponent(q)).then(r => r.json());
+  } catch (err) {
+    toast("⚠ Can't reach the server — is it running?");
+    return;
+  }
   const tbody = document.getElementById("rows");
   tbody.innerHTML = jobsCache.map(j => {
     const js = (j.job_status || "").trim();
@@ -209,6 +214,10 @@ async function saveJob() {
 document.getElementById("search").addEventListener("input", () => {
   clearTimeout(window._searchT);
   window._searchT = setTimeout(refresh, 250);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && editingId !== null) closeEditor();
 });
 
 refresh();

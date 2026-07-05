@@ -17,6 +17,7 @@
     </div>
   </div>
   <div class="right">
+    <span class="live" id="liveDot" title="Live connection to the server">● live</span>
     <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
     <div class="clock" id="clock"></div>
   </div>
@@ -68,7 +69,11 @@ async function refresh() {
   const isBad = (j) =>
     [j.s1, j.s2, j.s3, j.s4, j.s5, j.s6, j.s7, j.job_status].some(v => classify(v) === "bad");
 
+  const isOverdue = (j) => j.install_date < today &&
+    !["ALL READY", "DONE"].includes((j.job_status || "").toUpperCase().trim());
+
   const dueWeek = jobs.filter(j => j.install_date >= today && j.install_date <= weekEnd).length;
+  const overdue = jobs.filter(isOverdue).length;
   const inAssembly = jobs.filter(j => classify(j.s6) === "prog").length;
   const allReady = jobs.filter(j => (j.job_status || "").toUpperCase() === "ALL READY").length;
   const shorts = jobs.filter(isBad).length;
@@ -76,6 +81,7 @@ async function refresh() {
   document.getElementById("metrics").innerHTML = `
     <div class="metric"><div class="label">Active jobs</div><div class="value">${jobs.length}</div></div>
     <div class="metric"><div class="label">Due in next 7 days</div><div class="value">${dueWeek}</div></div>
+    <div class="metric ${overdue ? "warn" : ""}"><div class="label">Past install, not ready</div><div class="value">${overdue}</div></div>
     <div class="metric"><div class="label">In assembly</div><div class="value">${inAssembly}</div></div>
     <div class="metric"><div class="label">All ready</div><div class="value">${allReady}</div></div>
     <div class="metric ${shorts ? "alert clickable" : ""}" ${shorts ? 'onclick="cycleShorts()" title="Click to jump to the next short/change"' : ""}>
@@ -92,10 +98,11 @@ async function refresh() {
       return `<a class="dot ${classify(v)}" href="/station/${i + 1}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
     }).join(" ");
     const js = (j.job_status || "").trim();
+    const overdueJob = isOverdue(j);
     return `<tr data-bad="${isBad(j) ? 1 : 0}" class="${j.install_date === today ? "due-today" : ""}">
       <td class="ref">${esc(j.biz_ref || j.task_no)}</td>
       <td>${esc(j.customer)}</td>
-      <td>${fmtDate(j.install_date)}</td>
+      <td class="${overdueJob ? "overdue" : ""}">${fmtDate(j.install_date)}${overdueJob ? " ⚠" : ""}</td>
       <td>${esc(j.colour)}</td>
       <td><span style="display:inline-flex; gap:6px;">${dots}</span></td>
       <td><span class="pill ${classify(js)}">${esc(js || "—")}</span></td>
@@ -120,6 +127,11 @@ function cycleShorts() {
 setInterval(refresh, 60000);
 const es = new EventSource("/api/stream");
 es.addEventListener("job-updated", refresh);
+
+// Live indicator: EventSource auto-reconnects; reflect its state in the header.
+const liveDot = document.getElementById("liveDot");
+es.onopen = () => { liveDot.textContent = "● live"; liveDot.classList.remove("down"); };
+es.onerror = () => { liveDot.textContent = "○ reconnecting…"; liveDot.classList.add("down"); };
 </script>
 </body>
 </html>
