@@ -37,7 +37,10 @@ fully self-contained single-file versions (inline CSS, static sample data, both
 themes via the toggle) for importing into Open Design, Google Stitch, Figma
 import tools, or just opening in a browser. No server needed.
 
-## Import data from the spreadsheet export
+## Import data from the spreadsheet export (legacy / offline fallback)
+
+Superseded by the live sheet sync above — only needed if the web app isn't
+deployed or you want a bulk load from an offline xlsx:
 
 ```
 python tools/export_xlsx.py "C:\path\to\planner_source.xlsx"
@@ -46,9 +49,7 @@ node tools/import.js
 
 Reads all monthly tabs (e.g. `MAY-2026`) plus `JOBS IN QUEUE`, dedupes by task
 no (monthly tabs win over the queue, later months win), and **replaces all
-sheet-imported jobs**. Jobs added in the office app survive a re-import; station
-taps made on imported jobs do not — while parallel-running, the sheet stays the
-source of truth for those.
+sheet-imported jobs**. Jobs added in the office app survive a re-import.
 
 ## How it works
 
@@ -63,11 +64,18 @@ source of truth for those.
 
 Tests: `npm test` (cascade scenarios, 14 cases).
 
-## Sheet writeback (sheet stays master)
+## Sheet sync (sheet stays master)
 
-Station taps mirror straight back into the Google Sheet so the sheet stays the
-source of truth during the parallel run. Off by default — set two env vars to
-enable it:
+Two-way, via one GAS web app on the sheet (`tools/sheet-writeback.gs`):
+
+- **Writeback** — every station tap (plus its cascade) is written straight
+  into the sheet's station columns.
+- **Live read** — lookups that miss the local cache query the sheet directly,
+  so a job added to the sheet five minutes ago is findable on the floor with
+  no import step. The full cache also re-pulls from the sheet every 10 minutes
+  (keeps the dashboard fresh). SQLite is just a cache; the sheet is master.
+
+Off by default — set two env vars to enable:
 
 ```
 SHEET_WEBAPP_URL = <the /exec URL of the deployed web app>

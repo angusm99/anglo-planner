@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { open } = require("./db");
 const { STATIONS, applyCascade, norm } = require("./cascade");
-const { pushStationUpdate } = require("./sheet");
+const { pushStationUpdate, fetchSheetJobs, sheetEnabled } = require("./sheet");
 
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -88,6 +88,42 @@ function activeJobs(days) {
        AND install_date >= date('now', ?)
      ORDER BY install_date ASC, biz_ref ASC LIMIT 200`
   ).all(`-${lookback} days`);
+}
+
+// ---- live sheet cache -----------------------------------------------------
+// The sheet is master. SQLite is just a cache of it (plus OFFICE-only jobs).
+// Rows arrive from the GAS web app in exactly the import.js field shape.
+
+const SHEET_FIELDS = ["task_no", "biz_ref", "customer", "colour", "install_date",
+  "send_to_dash", "qty_windows", "qty_hinged", "qty_folding", "qty_palace",
+  "qty_specials", "qty_elite", "glasslist", "s1", "s2", "s3", "s4", "s5", "s6", "s7",
+  "job_status", "source_tab"];
+
+const upsertUpdate = db.prepare(
+  `UPDATE jobs SET ${SHEET_FIELDS.map((f) => `${f} = ?`).join(", ")}, updated_at = datetime('now','localtime') WHERE id = ?`
+);
+const upsertInsert = db.prepare(
+  `INSERT INTO jobs (${SHEET_FIELDS.join(",")}) VALUES (${SHEET_FIELDS.map(() => "?").join(",")})`
+);
+
+function upsertSheetJob(r) {
+  const existing = r.task_no
+    ? db.prepare("SELECT id FROM jobs WHERE task_no = ? AND source_tab <> 'OFFICE'").get(r.task_no)
+    : db.prepare("SELECT id FROM jobs WHERE biz_ref = ? AND source_tab <> 'OFFICE'").get(r.biz_ref);
+  const vals = SHEET_FIELDS.map((f) => r[f] ?? null);
+  if (existing) { upsertUpdate.run(...vals, existing.id); return existing.id; }
+  return Number(upsertInsert.run(...vals).lastInsertRowid);
+}
+
+// ponytail: upsert-only — rows deleted from the sheet linger in the cache
+// until archived in /office. Add delete-sync if that ever actually bites.
+async function refreshFromSheet() {
+  const jobs = await fetchSheetJobs({ all: "1" });
+  if (!jobs.length) return 0;
+  for (const r of jobs) upsertSheetJob(r);
+  console.log(`[sheet] cache refreshed: ${jobs.length} jobs`);
+  broadcast("job-updated", { jobId: null, applied: [] }); // nudge dashboards
+  return jobs.length;
 }
 
 const EDITABLE_FIELDS = [
@@ -223,7 +259,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, STATIONS);
     }
     if (p === "/api/lookup") {
-      return json(res, 200, lookup(url.searchParams.get("ref")));
+      const ref = url.searchParams.get("ref");
+      let rows = lookup(ref);
+      if (!rows.length && sheetEnabled()) {
+        // Not in the cache — ask the live sheet, cache what comes back.
+        const remote = await fetchSheetJobs({ ref: norm(ref) });
+        for (const r of remote) upsertSheetJob(r);
+        if (remote.length) rows = lookup(ref);
+      }
+      return json(res, 200, rows);
     }
     if (p === "/api/jobs") {
       if (req.method === "POST") {
@@ -294,4 +338,11 @@ server.listen(PORT, () => {
   console.log(`Anglo planner running at http://localhost:${PORT}`);
   console.log(`Stations: http://localhost:${PORT}/station/1 .. /station/7`);
   console.log(`Dashboard: http://localhost:${PORT}/dashboard`);
+  if (sheetEnabled()) {
+    refreshFromSheet();
+    setInterval(refreshFromSheet, 10 * 60e3).unref(); // sheet is master; re-pull every 10 min
+    console.log("Sheet sync: ON (live lookup fallback + 10-min cache refresh + tap writeback)");
+  } else {
+    console.log("Sheet sync: OFF — set SHEET_WEBAPP_URL and SHEET_TOKEN to enable");
+  }
 });

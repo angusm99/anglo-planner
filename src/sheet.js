@@ -48,6 +48,37 @@ function post(urlStr, data) {
   });
 }
 
+function get(params) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(URL_STR);
+    u.searchParams.set("token", TOKEN);
+    for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+    const go = (target, hops) => https.get(target, (res) => {
+      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && hops < 2) {
+        res.resume();
+        return go(res.headers.location, hops + 1);
+      }
+      let b = ""; res.on("data", (c) => (b += c)); res.on("end", () => resolve(b));
+    }).on("error", reject);
+    go(u, 0);
+  });
+}
+
+// Live read from the sheet. Returns [] on any failure so lookups never break.
+async function fetchSheetJobs(params) {
+  if (!URL_STR) return [];
+  try {
+    const body = JSON.parse(await get(params));
+    if (!body.ok) { console.error(`[sheet] read failed: ${body.error}`); return []; }
+    return body.jobs || [];
+  } catch (e) {
+    console.error(`[sheet] read failed: ${e.message}`);
+    return [];
+  }
+}
+
+const sheetEnabled = () => Boolean(URL_STR);
+
 // Fire-and-forget: never blocks or breaks the station tap. Retries a couple of
 // times to ride out a WiFi blip, then logs.
 // ponytail: in-memory retry x2 only — an update lost to 3 failures or a server
@@ -71,4 +102,4 @@ function pushStationUpdate(job, applied, attempt = 0) {
     .catch((e) => { if (retry()) console.error(`[sheet] push failed: ${e.message}`); });
 }
 
-module.exports = { buildPayload, pushStationUpdate };
+module.exports = { buildPayload, pushStationUpdate, fetchSheetJobs, sheetEnabled };
