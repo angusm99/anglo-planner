@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node src/server.js",
     "import": "node tools/import.js",
-    "test": "node --test tests/cascade.test.js"
+    "test": "node --test tests/*.test.js"
   }
 }

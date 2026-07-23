@@ -63,13 +63,34 @@ source of truth for those.
 
 Tests: `npm test` (cascade scenarios, 14 cases).
 
+## Sheet writeback (sheet stays master)
+
+Station taps mirror straight back into the Google Sheet so the sheet stays the
+source of truth during the parallel run. Off by default — set two env vars to
+enable it:
+
+```
+SHEET_WEBAPP_URL = <the /exec URL of the deployed web app>
+SHEET_TOKEN      = <shared secret, same as the sheet's PLANNER_TOKEN>
+```
+
+Deploy the endpoint once: paste `tools/sheet-writeback.gs` into the sheet's
+Apps Script project and publish it as a Web App (full steps in that file). It
+runs as you, so it can write protected ranges; the planner posts to it with
+Node's built-in `https` — no extra dependency. Column mapping matches
+`tools/export_xlsx.py` (A = task no, O–U = stations 1–7, V = job status).
+
+Office edits are **not** pushed (office-only jobs have no sheet row). If you want
+office install-date/status edits to push too, call `pushStationUpdate` from
+`editJob` the same way `updateStation` does.
+
 ## Phase 2
 
 Done:
 - Office/admin view: add jobs, edit install dates, send-to-dash, job-status overrides
+- Station → sheet writeback (above)
 
 Still to build:
-- Two-way Google Sheet sync for the parallel-run period (Apps Script → POST /api)
 - Cover-sheet printing with QR codes; camera scanning on tablets
 - Calendar checker sync port; lead-time reports from the events table
 - Simple PIN per station / user accounts before factory rollout

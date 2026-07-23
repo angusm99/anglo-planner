@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { open } = require("./db");
 const { STATIONS, applyCascade, norm } = require("./cascade");
+const { pushStationUpdate } = require("./sheet");
 
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -209,6 +210,7 @@ function updateStation(body) {
 
   const fresh = getJob(jobId);
   broadcast("job-updated", { jobId, applied });
+  pushStationUpdate(fresh, applied); // mirror the tap into the sheet (sheet stays master)
   return { job: fresh, applied };
 }
 
