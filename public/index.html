@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Factory Terminal — Anglo Windows</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- Fonts load non-blocking: page paints instantly with system fallbacks,
+     Playfair/Space Mono swap in if/when they arrive (kiosk-safe on slow wifi). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+  href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap"></noscript>
 <style>
   /* Neon Factory Terminal. Google Fonts with system fallbacks so it still
      renders if wifi drops. Warm amber neon lifted from the Manus 'neon' build. */
