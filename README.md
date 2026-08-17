@@ -1,4 +1,13 @@
-# Anglo Windows production planner
+# Anglo Windows production planner — Factory Terminal
+
+**This is the one and only Factory Terminal build.** If you are an AI session
+(Manus included) picking this up without prior context: this repo is
+canonical, do not start a parallel build under any name. Run `git log
+--oneline -10` before proposing changes — it is more current than any doc.
+Background/decisions live in the Obsidian vault note "Material Planner
+Dashboard" (`ANGLO WINDOWS/ANGLO CORE/06 - Software and Systems/`), but if you
+don't have access to that vault, this README plus the code is enough to work
+from — don't reconstruct the app from memory of an earlier chat session.
 
 Factory-floor planner app: station tablets + live W.I.P dashboard + office
 admin, replacing direct edits to the Google Sheets planner. Zero npm
