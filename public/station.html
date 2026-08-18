@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Station — Anglo planner</title>
 <script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
 <link rel="stylesheet" href="/styles.css">
@@ -11,59 +11,93 @@
 <header class="app">
   <div class="brand">
     <div class="mark" id="stNum">·</div>
-    <div>
-      <h1 id="stName">Station</h1>
-      <div class="sub" id="stWho"></div>
-    </div>
+    <div><h1 id="stName">Station</h1><div class="sub" id="stWho">Choose an operator to begin</div></div>
   </div>
   <div class="right">
     <button class="theme" onclick="location.href='/'">← Home</button>
+    <button class="theme" id="changeOperator" style="display:none;">Change Operator</button>
     <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
     <div class="clock" id="clock"></div>
   </div>
 </header>
 <main>
-  <section id="scanView" class="card">
-    <h2 style="font-size:17px; margin-bottom:6px;">Scan the job cover, or type the ref</h2>
-    <p style="color:var(--muted); font-size:14px; margin-bottom:14px;">Bizman ref (e.g. D1738) or task no (e.g. 526889), then press Go.</p>
-    <form id="refForm" style="display:flex; gap:10px;">
-      <input class="ref" id="refInput" autocomplete="off" autofocus placeholder="D1738">
-      <button class="big" type="submit" style="min-width:120px;">Go</button>
+  <section id="operatorView" class="card">
+    <h2 style="font-size:19px;">Who is using this station?</h2>
+    <p style="color:var(--muted);font-size:14px;margin-top:7px;">Confirm the operator before looking up or updating a job.</p>
+    <p id="scanWaiting" style="display:none;margin-top:10px;color:var(--accent);font-weight:600;"></p>
+    <div class="operator-grid">
+      <button class="big operator-choice" id="primaryOperator" type="button" disabled>
+        <strong>PRIMARY OPERATOR</strong><span id="primaryName">Loading…</span>
+      </button>
+      <button class="big operator-choice" id="guestOperator" type="button">
+        <strong>GUEST OPERATOR</strong><span>Enter your own name</span>
+      </button>
+    </div>
+    <div id="guestPanel" style="display:none;margin-top:14px;">
+      <label class="field">Guest operator name<input id="guestName" autocomplete="name" placeholder="Type your name"></label>
+      <button class="big" id="confirmGuest" type="button" style="width:100%;min-height:58px;margin-top:10px;">Confirm Guest Operator</button>
+    </div>
+    <p id="rememberedOperator" style="color:var(--muted);font-size:12px;margin-top:12px;"></p>
+  </section>
+
+  <section id="scanView" class="card" style="display:none;">
+    <h2 style="font-size:17px;margin-bottom:6px;">Scan the job cover, or type the ref</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:14px;">Enter one or several Biz Refs/task numbers. Separate them with spaces, commas, semicolons or new lines.</p>
+    <form id="refForm" style="display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:10px;align-items:stretch;">
+      <textarea class="ref" id="refInput" autocomplete="off" rows="2" placeholder="C9687 D1738 A1234"></textarea>
+      <button class="big" type="submit">Go</button>
     </form>
-    <div id="matches" style="margin-top:14px; display:grid; gap:10px;"></div>
+    <div class="queue-status" id="queueStatus"></div>
+    <div id="matches" style="margin-top:8px;display:grid;gap:10px;"></div>
   </section>
 
   <section id="jobView" class="card" style="display:none;">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
       <div>
-        <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
-          <span id="jobRef" style="font-size:34px; font-weight:700;"></span>
-          <span id="jobCustomer" style="font-size:17px; color:var(--muted);"></span>
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+          <span id="jobRef" style="font-size:34px;font-weight:700;"></span>
+          <span id="jobCustomer" style="font-size:17px;color:var(--muted);"></span>
         </div>
-        <div id="jobMeta" style="margin-top:6px; color:var(--muted); font-size:15px;"></div>
-        <div id="jobChips" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+        <div id="jobMeta" style="margin-top:6px;color:var(--muted);font-size:15px;"></div>
+        <div id="jobChips" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
-      <button class="big" id="backBtn" style="min-height:52px; font-size:15px;">Next job ⟶</button>
+      <button class="big" id="backBtn" type="button" style="min-height:52px;font-size:15px;">Next job ⟶</button>
     </div>
-
-    <div style="margin:18px 0 10px; display:flex; align-items:center; gap:10px;">
-      <span style="font-size:14px; color:var(--muted);">This station now:</span>
-      <span class="pill queue" id="currentVal">—</span>
+    <div class="queue-status" id="jobQueueStatus"></div>
+    <div style="margin:14px 0 10px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:14px;color:var(--muted);">This station now:</span><span class="pill queue" id="currentVal">—</span>
     </div>
-
-    <div id="buttons" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px;"></div>
-    <p id="cascadeNote" style="margin-top:14px; font-size:14px; color:var(--muted);"></p>
+    <div id="buttons" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"></div>
+    <div id="confirmPanel" class="confirm-panel" style="display:none;">
+      <strong id="confirmTitle">Confirm update</strong>
+      <p id="confirmText" style="margin-top:6px;color:var(--muted);line-height:1.45;"></p>
+      <div class="confirm-actions">
+        <button class="big" id="cancelUpdate" type="button" style="min-height:58px;">Cancel</button>
+        <button class="big" id="confirmUpdate" type="button" style="min-height:58px;border-color:var(--accent);">Confirm &amp; save</button>
+      </div>
+    </div>
+    <p id="cascadeNote" style="margin-top:14px;font-size:14px;color:var(--muted);"></p>
   </section>
 </main>
 <div class="toast" id="toast"></div>
 
 <script src="/common.js"></script>
 <script>
-const stationNum = location.pathname.split("/")[2];
-let stationCfg = null;
-let job = null;
-
+const stationNum = Number(location.pathname.split("/")[2]);
+const params = new URLSearchParams(location.search);
+const initialRef = String(params.get("ref") || "").trim().toUpperCase();
 const $ = (id) => document.getElementById(id);
+
+let stationCfg = null;
+let operatorName = "";
+let operatorType = "";
+let job = null;
+let currentRef = "";
+let refQueue = [];
+let pendingValue = "";
+let initialQueued = false;
+let advanceTimer = null;
+
 startClock($("clock"));
 $("themeBtn").textContent = themeButtonLabel();
 
@@ -72,113 +106,227 @@ fetch("/api/stations").then(r => r.json()).then(all => {
   if (!stationCfg) { $("stName").textContent = "Unknown station"; return; }
   $("stNum").textContent = stationNum;
   $("stName").textContent = `Station ${stationNum} — ${stationCfg.name}`;
-  $("stWho").textContent = `Responsible: ${stationCfg.responsible}`;
-});
-
-$("refForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const ref = $("refInput").value.trim();
-  if (!ref) return;
-  const matches = await fetch(`/api/lookup?ref=${encodeURIComponent(ref)}`).then(r => r.json());
-  if (matches.length === 0) {
-    toast(`No job found for "${ref.toUpperCase()}"`);
-  } else if (matches.length === 1) {
-    showJob(matches[0]);
-  } else {
-    const wrap = $("matches");
-    wrap.innerHTML = "";
-    for (const m of matches) {
-      const b = document.createElement("button");
-      b.className = "big";
-      b.style.textAlign = "left";
-      b.innerHTML = `${esc(m.biz_ref)} — ${esc(m.customer)}<br><span style="font-size:13px;font-weight:400;color:var(--muted)">Install ${fmtDate(m.install_date)} · ${esc(m.source_tab)}</span>`;
-      b.onclick = () => showJob(m);
-      wrap.appendChild(b);
-    }
+  $("primaryName").textContent = stationCfg.responsible;
+  $("primaryOperator").disabled = false;
+  if (initialRef) {
+    $("scanWaiting").style.display = "block";
+    $("scanWaiting").textContent = `Scanned job waiting: ${initialRef}`;
   }
-});
+  restoreOperatorHint();
+}).catch(() => { $("stWho").textContent = "Server unavailable"; });
 
-function showJob(j) {
-  job = j;
-  $("scanView").style.display = "none";
-  $("jobView").style.display = "block";
-  $("jobRef").textContent = j.biz_ref || j.task_no;
-  $("jobCustomer").textContent = j.customer;
-  $("jobMeta").textContent =
-    `Install ${fmtDate(j.install_date)} · ${j.colour || "no colour"} · task ${j.task_no || "—"}` +
-    (j.glasslist ? " · glasslist" : "");
-  $("jobChips").innerHTML = qtyChips(j).map(c => `<span class="pill queue">${esc(c)}</span>`).join("");
-  renderCurrent(j);
-  renderButtons();
-  $("cascadeNote").textContent = "";
-}
-
-function renderCurrent(j) {
-  const v = j["s" + stationNum] || "—";
-  const el = $("currentVal");
-  el.textContent = v === "" ? "—" : v;
-  el.className = "pill " + classify(v);
-}
-
-function renderButtons() {
-  const wrap = $("buttons");
-  wrap.innerHTML = "";
-  for (const val of stationCfg.buttons) {
-    const b = document.createElement("button");
-    b.className = "big";
-    b.textContent = val;
-    b.onclick = () => submit(val, b);
-    wrap.appendChild(b);
-  }
-}
-
-async function submit(value, btn) {
-  for (const b of $("buttons").children) b.disabled = true;
-  let res;
+function restoreOperatorHint() {
   try {
-    res = await fetch("/api/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jobId: job.id, station: Number(stationNum), value,
-        actor: stationCfg.responsible, source: "station-" + stationNum,
-      }),
-    }).then(r => r.json());
-  } catch (err) {
-    res = { error: "No connection — check WiFi and try again" };
-  } finally {
-    for (const b of $("buttons").children) b.disabled = false;
-  }
-
-  if (res.error) { toast("Error: " + res.error); return; }
-  job = res.job;
-  renderCurrent(job);
-
-  const others = res.applied.filter(c => c.field !== "s" + stationNum);
-  const names = { s1: "Planning", s2: "Material control", s3: "Despatch", s4: "Saw 1", s5: "Saw 2", s6: "Assembly", s7: "Glass", job_status: "Job status" };
-  $("cascadeNote").textContent = others.length
-    ? "Also updated: " + others.map(c => `${names[c.field]} → ${c.to}`).join(", ")
-    : "";
-  toast(`Saved ✓  ${value}`);
-  setTimeout(backToScan, 6000);
+    const saved = JSON.parse(localStorage.getItem(`anglo-operator-${stationNum}`) || "null");
+    if (!saved?.name) return;
+    $("rememberedOperator").textContent = `Last used by ${saved.name} — please confirm again.`;
+    if (saved.type === "guest") $("guestName").value = saved.name;
+  } catch (_) { /* bad local preference should never block the station */ }
 }
 
-function backToScan() {
+function confirmOperator(name, type) {
+  const clean = String(name || "").trim();
+  if (!clean) { toast("Enter the guest operator name"); return; }
+  operatorName = clean;
+  operatorType = type;
+  localStorage.setItem(`anglo-operator-${stationNum}`, JSON.stringify({ name: clean, type }));
+  $("stWho").textContent = `Operator: ${clean}`;
+  $("changeOperator").style.display = "inline-block";
+  $("operatorView").style.display = "none";
+  if (job) {
+    $("jobView").style.display = "block";
+    return;
+  }
+  $("scanView").style.display = "block";
+  if (initialRef && !initialQueued) {
+    refQueue.push(initialRef);
+    initialQueued = true;
+  }
+  if (!currentRef && refQueue.length) processNextRef();
+  else { renderQueue(); $("refInput").focus(); }
+}
+
+$("primaryOperator").onclick = () => confirmOperator(stationCfg.responsible, "primary");
+$("guestOperator").onclick = () => {
+  $("guestPanel").style.display = "block";
+  $("guestName").focus();
+};
+$("confirmGuest").onclick = () => confirmOperator($("guestName").value, "guest");
+$("guestName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("confirmGuest").click(); } });
+$("changeOperator").onclick = () => {
+  clearTimeout(advanceTimer);
+  cancelConfirmation();
+  operatorName = "";
+  operatorType = "";
+  $("changeOperator").style.display = "none";
+  $("stWho").textContent = "Choose an operator to continue";
+  $("scanView").style.display = "none";
+  $("jobView").style.display = "none";
+  $("operatorView").style.display = "block";
+  restoreOperatorHint();
+};
+
+function splitRefs(value) {
+  return String(value || "").split(/[\s,;]+/).map(v => v.trim().toUpperCase()).filter(Boolean);
+}
+
+$("refForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const refs = splitRefs($("refInput").value);
+  if (!refs.length) return;
+  refQueue.push(...refs);
+  $("refInput").value = "";
+  renderQueue();
+  if (!currentRef && !job) processNextRef();
+});
+
+async function processNextRef() {
+  job = null;
   $("jobView").style.display = "none";
   $("scanView").style.display = "block";
   $("matches").innerHTML = "";
-  $("refInput").value = "";
-  $("refInput").focus();
+  if (!refQueue.length) {
+    currentRef = "";
+    renderQueue();
+    $("refInput").focus();
+    return;
+  }
+  currentRef = refQueue.shift();
+  renderQueue(`Looking up ${currentRef}…`);
+  let matches;
+  try {
+    const response = await fetch(`/api/lookup?ref=${encodeURIComponent(currentRef)}`);
+    matches = await response.json();
+    if (!response.ok) throw new Error(matches.error || "Lookup failed");
+  } catch (err) {
+    showLookupFailure(`${currentRef}: ${err.message || "No connection"}`);
+    return;
+  }
+  if (!matches.length) {
+    showLookupFailure(`No job found for ${currentRef}`);
+  } else if (matches.length === 1) {
+    showJob(matches[0]);
+  } else {
+    renderQueue(`${currentRef} has ${matches.length} matches · ${refQueue.length} remaining`);
+    for (const match of matches) {
+      const b = document.createElement("button");
+      b.className = "big";
+      b.style.textAlign = "left";
+      b.innerHTML = `${esc(match.biz_ref)} — ${esc(match.customer)}<br><span style="font-size:13px;font-weight:400;color:var(--muted)">Install ${fmtDate(match.install_date)} · ${esc(match.source_tab)}</span>`;
+      b.onclick = () => showJob(match);
+      $("matches").appendChild(b);
+    }
+  }
 }
-$("backBtn").onclick = backToScan;
+
+function showLookupFailure(message) {
+  renderQueue(`${message} · ${refQueue.length} still queued`);
+  const box = document.createElement("div");
+  box.className = "confirm-panel";
+  box.innerHTML = `<strong>${esc(message)}</strong><p style="margin-top:6px;color:var(--muted)">The remaining references have been kept.</p>`;
+  const next = document.createElement("button");
+  next.className = "big";
+  next.style.cssText = "width:100%;min-height:56px;margin-top:10px";
+  next.textContent = refQueue.length ? "Continue to next ref ⟶" : "Enter another ref";
+  next.onclick = () => { currentRef = ""; processNextRef(); };
+  box.appendChild(next);
+  $("matches").appendChild(box);
+}
+
+function showJob(value) {
+  job = value;
+  $("scanView").style.display = "none";
+  $("jobView").style.display = "block";
+  $("jobRef").textContent = value.biz_ref || value.task_no;
+  $("jobCustomer").textContent = value.customer;
+  $("jobMeta").textContent = `Install ${fmtDate(value.install_date)} · ${value.colour || "no colour"} · task ${value.task_no || "—"}` + (value.glasslist ? " · glasslist" : "");
+  $("jobChips").innerHTML = qtyChips(value).map(c => `<span class="pill queue">${esc(c)}</span>`).join("");
+  $("jobQueueStatus").textContent = `Processing ${currentRef || value.biz_ref} · ${refQueue.length} remaining`;
+  renderCurrent();
+  renderButtons();
+  cancelConfirmation();
+  $("cascadeNote").textContent = "";
+}
+
+function renderCurrent() {
+  const raw = job?.[stationCfg.key];
+  const display = raw && String(raw).trim() !== "0" ? raw : "—";
+  $("currentVal").textContent = display;
+  $("currentVal").className = "pill " + classify(raw);
+}
+
+function renderButtons() {
+  $("buttons").innerHTML = "";
+  for (const value of stationCfg.buttons) {
+    const b = document.createElement("button");
+    b.className = "big";
+    b.textContent = value;
+    b.onclick = () => askConfirmation(value);
+    $("buttons").appendChild(b);
+  }
+}
+
+function askConfirmation(value) {
+  pendingValue = value;
+  $("confirmTitle").textContent = `Confirm ${value}`;
+  $("confirmText").textContent = `${operatorName} is setting ${job.biz_ref || job.task_no} at Station ${stationNum} — ${stationCfg.name} to ${value}.`;
+  $("confirmPanel").style.display = "block";
+  $("confirmPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function cancelConfirmation() {
+  pendingValue = "";
+  $("confirmPanel").style.display = "none";
+}
+$("cancelUpdate").onclick = cancelConfirmation;
+$("confirmUpdate").onclick = () => { if (pendingValue) submit(pendingValue); };
+
+async function submit(value) {
+  $("confirmUpdate").disabled = true;
+  let result;
+  try {
+    const response = await fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, station: stationNum, value, actor: operatorName, source: `station-${stationNum}` }),
+    });
+    result = await response.json();
+    if (!response.ok && !result.error) result.error = "Update failed";
+  } catch (_) { result = { error: "No connection — check WiFi and try again" }; }
+  $("confirmUpdate").disabled = false;
+  if (result.error) { toast("Error: " + result.error); return; }
+
+  job = result.job;
+  renderCurrent();
+  cancelConfirmation();
+  const others = result.applied.filter(change => change.field !== stationCfg.key);
+  const names = { s1:"Planning",s2:"Material control",s3:"Despatch",s4:"Saw 1",s5:"Saw 2",s6:"Assembly",s7:"Glass",job_status:"Job status" };
+  $("cascadeNote").textContent = others.length ? "Also updated: " + others.map(c => `${names[c.field]} → ${c.to}`).join(", ") : "";
+  toast(`Saved ✓ ${value} · ${operatorName}`);
+  clearTimeout(advanceTimer);
+  advanceTimer = setTimeout(nextJob, 3500);
+}
+
+function nextJob() {
+  clearTimeout(advanceTimer);
+  cancelConfirmation();
+  job = null;
+  currentRef = "";
+  processNextRef();
+}
+$("backBtn").onclick = nextJob;
+
+function renderQueue(message) {
+  const text = message || (currentRef ? `Processing ${currentRef} · ${refQueue.length} remaining` : refQueue.length ? `${refQueue.length} references queued` : "Ready for references");
+  $("queueStatus").textContent = text;
+}
 
 let toastTimer;
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.classList.add("show");
+function toast(message) {
+  $("toast").textContent = message;
+  $("toast").classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 2800);
 }
 </script>
 </body>

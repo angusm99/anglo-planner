@@ -2,140 +2,121 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Factory Terminal — Anglo Windows</title>
-<!-- Fonts load non-blocking: page paints instantly with system fallbacks,
-     Playfair/Space Mono swap in if/when they arrive (kiosk-safe on slow wifi). -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" media="print" onload="this.media='all'"
-  href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap"></noscript>
+<link rel="icon" href="data:,">
 <style>
-  /* Neon Factory Terminal. Google Fonts with system fallbacks so it still
-     renders if wifi drops. Warm amber neon lifted from the Manus 'neon' build. */
-  :root {
-    --gold: #fcd34d;
-    --gold-deep: #f59e0b;
-    --serif: "Playfair Display", "Iowan Old Style", Georgia, serif;
-    --mono: "Space Mono", "Cascadia Mono", Consolas, monospace;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { min-height: 100%; }
-  body {
-    font-family: var(--mono);
-    color: var(--gold);
-    background:
-      radial-gradient(circle at 20% 30%, rgba(252,211,77,0.10), transparent 45%),
-      radial-gradient(circle at 82% 85%, rgba(245,158,11,0.08), transparent 45%),
-      linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%);
-    background-attachment: fixed;
-    min-height: 100vh;
-    display: flex; align-items: flex-start; justify-content: center;
-  }
-  /* animated scanlines */
-  body::after {
-    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 5;
-    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 2px);
-    animation: scan 8s linear infinite;
-  }
-  @keyframes scan { from { transform: translateY(0); } to { transform: translateY(10px); } }
-
-  main { width: 100%; max-width: 860px; padding: 34px 20px 48px; position: relative; z-index: 1; }
-
-  .hero { text-align: center; margin-bottom: 22px; }
-  .logo { filter: drop-shadow(0 0 4px rgba(252,211,77,0.35)); margin-bottom: 10px; }
-  .brand {
-    font-family: var(--serif); font-weight: 700; line-height: 1.05;
-    font-size: clamp(24px, 5.6vw, 46px); letter-spacing: 0.03em;
-    color: var(--gold);
-    text-shadow: 0 0 12px rgba(252,211,77,0.35);
-  }
-  .sub {
-    font-size: clamp(10px, 2vw, 13px); letter-spacing: 0.38em; text-indent: 0.38em;
-    color: rgba(252,211,77,0.7); margin-top: 10px;
-  }
-  .statusline {
-    font-size: 11px; letter-spacing: 0.14em; color: rgba(252,211,77,0.6);
-    margin-top: 12px; text-transform: uppercase;
-  }
-  .statusline .on { color: #4ade80; text-shadow: 0 0 6px rgba(74,222,128,0.8); }
-  .statusline .off { color: #f87171; text-shadow: 0 0 6px rgba(248,113,113,0.8); }
-
-  .menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
-  button.station {
-    font-family: var(--mono); text-align: left; cursor: pointer;
-    display: flex; align-items: center; gap: 18px;
-    background: transparent; color: var(--gold);
-    border: 2px solid var(--gold); border-radius: 4px;
-    padding: 20px 22px; min-height: 92px;
-    letter-spacing: 0.04em; touch-action: manipulation;
-    box-shadow: inset 0 0 12px rgba(252,211,77,0.05);
-    transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
-  }
-  button.station:hover {
-    transform: translateY(-2px);
-    background: rgba(252,211,77,0.09);
-    box-shadow: 0 0 14px rgba(252,211,77,0.3), inset 0 0 12px rgba(252,211,77,0.08);
-  }
-  button.station:active {
-    transform: translateY(0);
-    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
-    color: #000;
-    box-shadow: 0 0 18px rgba(252,211,77,0.45);
-  }
-  button.station .num {
-    font-family: var(--serif); font-weight: 700; font-size: 36px; min-width: 44px; text-align: center;
-    color: rgba(252,211,77,0.85);
-  }
-  button.station:active .num { color: #000; }
-  button.station:active .num { text-shadow: none; }
-  button.station .name { display: block; font-size: 19px; font-weight: 700; text-transform: uppercase; }
-  button.station .who { display: block; font-size: 12px; letter-spacing: 0.14em; color: rgba(252,211,77,0.55); margin-top: 6px; text-transform: uppercase; }
-  button.station:active .who { color: rgba(0,0,0,0.65); }
-
-  footer { text-align: center; font-size: 11px; letter-spacing: 0.16em; color: rgba(252,211,77,0.4); margin-top: 30px; line-height: 2; text-transform: uppercase; }
+  :root { --gold:#f6c945; --deep:#d99a16; --black:#0b0b09; --panel:#15140f; --muted:#aa9c6f; --mono:"Cascadia Mono",Consolas,monospace; }
+  * { box-sizing:border-box; margin:0; }
+  html,body { min-height:100%; }
+  body { color:var(--gold); font-family:var(--mono); background:radial-gradient(circle at 50% 0,rgba(246,201,69,.08),transparent 34%),linear-gradient(180deg,#11100c 0%,var(--black) 65%); }
+  main { width:100%; max-width:760px; margin:auto; padding:16px 14px 24px; }
+  .hero { text-align:center; margin-bottom:13px; }
+  .logo { display:block; width:min(390px,78vw); max-height:134px; object-fit:contain; margin:0 auto 3px; filter:sepia(1) saturate(5) drop-shadow(0 2px 8px rgba(246,201,69,.18)); }
+  .subtitle { font-size:12px; letter-spacing:.42em; text-indent:.42em; font-weight:700; }
+  .statusline { margin-top:8px; font-size:9px; color:var(--muted); letter-spacing:.07em; text-transform:uppercase; }
+  .statusline .on { color:#5ee2a7; }
+  .statusline .off { color:#ff7a72; }
+  .menu { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  button { font-family:inherit; touch-action:manipulation; }
+  .station { min-width:0; min-height:88px; padding:11px 12px; text-align:left; cursor:pointer; color:var(--gold); background:linear-gradient(145deg,rgba(246,201,69,.035),transparent 70%); border:1.5px solid rgba(246,201,69,.72); border-radius:8px; box-shadow:inset 0 0 0 1px rgba(246,201,69,.035); }
+  .station:active,.qr-button:active { transform:scale(.98); background:var(--gold); color:#0a0906; }
+  .station-no { display:block; font-size:10px; letter-spacing:.16em; font-weight:700; opacity:.72; }
+  .station-name { display:block; font-size:clamp(13px,3.25vw,17px); line-height:1.12; font-weight:800; margin-top:7px; text-transform:uppercase; }
+  .operator { display:block; margin-top:7px; font-size:clamp(8px,2.05vw,10px); line-height:1.25; letter-spacing:.05em; color:var(--muted); text-transform:uppercase; }
+  .station:active .station-no,.station:active .operator { color:#0a0906; }
+  .qr-button { width:100%; min-height:62px; margin-top:11px; cursor:pointer; color:#0a0906; background:linear-gradient(135deg,var(--gold),var(--deep)); border:0; border-radius:8px; font-size:13px; font-weight:900; letter-spacing:.06em; }
+  footer { text-align:center; margin-top:16px; color:#766d4f; font-size:9px; letter-spacing:.1em; text-transform:uppercase; }
+  .modal { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.84); }
+  .modal.open { display:flex; }
+  .modal-card { width:min(520px,100%); max-height:calc(100vh - 24px); overflow:auto; padding:18px; border:1.5px solid var(--gold); border-radius:10px; background:#15140f; }
+  .modal-head { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .close { width:42px; height:42px; color:var(--gold); background:transparent; border:1px solid #665a34; border-radius:7px; font-size:20px; }
+  video { display:none; width:100%; max-height:46vh; margin-top:13px; border-radius:8px; background:#000; }
+  video.active { display:block; }
+  .scan-note { margin:10px 0; color:var(--muted); font-size:12px; line-height:1.45; }
+  textarea { width:100%; min-height:76px; padding:12px; color:#f4f0df; background:#0c0c09; border:1px solid #665a34; border-radius:7px; font:16px var(--mono); resize:vertical; }
+  .paste-go { width:100%; min-height:52px; margin-top:8px; color:#0a0906; background:var(--gold); border:0; border-radius:7px; font-weight:800; }
+  .error { min-height:18px; margin-top:8px; color:#ff7a72; font-size:12px; }
+  @media (max-width:390px) { main{padding:10px 9px 18px}.menu{gap:7px}.station{padding:9px;min-height:82px}.logo{max-height:105px}.operator{letter-spacing:0} }
 </style>
 </head>
 <body>
 <main>
   <div class="hero">
-    <svg class="logo" width="58" height="49" viewBox="0 0 86 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M6 70V34a37 37 0 0 1 74 0v36" stroke="var(--gold)" stroke-width="2.4"/>
-      <path d="M43 6v64M6 46h74" stroke="var(--gold)" stroke-width="1.6" opacity="0.9"/>
-      <path d="M22 22.5A30 30 0 0 1 64 22.5" stroke="var(--gold)" stroke-width="1.4" opacity="0.6"/>
-    </svg>
-    <div class="brand">ANGLO WINDOWS</div>
-    <div class="sub">FACTORY TERMINAL</div>
-    <div class="statusline">
-      <span id="sysDot" class="on">●</span> <span id="sys">CONNECTING…</span>
-      &nbsp;·&nbsp; GOOGLE SHEET · MASTER &nbsp;·&nbsp; <span id="clock">—</span>
-    </div>
+    <img class="logo" src="/anglo-logo.png" alt="Anglo Windows">
+    <div class="subtitle">FACTORY TERMINAL</div>
+    <div class="statusline"><span id="sysDot" class="on">●</span> <span id="sys">CONNECTING…</span> · GOOGLE SHEET MASTER · <span id="clock">—</span></div>
   </div>
-
   <div class="menu" id="stations"></div>
-
-  <footer>Select your station to begin · Cape Town Manufacturing</footer>
+  <button class="qr-button" id="openQr" type="button">▣ &nbsp; SCAN COVER-SHEET QR CODE</button>
+  <footer>Select your station to begin · Cape Town manufacturing</footer>
 </main>
 
+<div class="modal" id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+  <div class="modal-card">
+    <div class="modal-head"><h2 id="qrTitle">Scan cover-sheet QR</h2><button class="close" id="closeQr" aria-label="Close">×</button></div>
+    <p class="scan-note" id="scanNote">Point the rear camera at the QR code. You can also paste its contents below.</p>
+    <video id="qrVideo" playsinline muted></video>
+    <textarea id="qrPaste" placeholder="Paste QR text here"></textarea>
+    <button class="paste-go" id="parseQr" type="button">OPEN JOB</button>
+    <div class="error" id="qrError"></div>
+  </div>
+</div>
+
 <script src="/common.js"></script>
+<script src="/qr.js"></script>
 <script>
-startClock(document.getElementById("clock"));
+const $ = (id) => document.getElementById(id);
+startClock($("clock"));
 fetch("/api/stations").then(r => r.json()).then(stations => {
-  document.getElementById("sys").textContent = "ONLINE";
-  const wrap = document.getElementById("stations");
+  $("sys").textContent = "ONLINE";
   for (const [num, st] of Object.entries(stations)) {
     const b = document.createElement("button");
     b.className = "station";
-    b.innerHTML = `<span class="num">${num}</span>
-      <span><span class="name">${esc(st.name)}</span><span class="who">${esc(st.responsible)}</span></span>`;
+    b.innerHTML = `<span class="station-no">STATION ${esc(num)}</span><span class="station-name">${esc(st.name)}</span><span class="operator">PRIMARY OPERATOR · ${esc(st.responsible)}</span>`;
     b.onclick = () => location.href = `/station/${num}`;
-    wrap.appendChild(b);
+    $("stations").appendChild(b);
   }
 }).catch(() => {
-  document.getElementById("sys").textContent = "OFFLINE — SERVER UNREACHABLE";
-  document.getElementById("sysDot").className = "off";
+  $("sys").textContent = "OFFLINE — SERVER UNREACHABLE";
+  $("sysDot").className = "off";
 });
+
+let stopScanner = null;
+function routeQr(raw) {
+  try {
+    const parsed = AngloQR.parseQrPayload(raw);
+    location.href = AngloQR.routeFor(parsed);
+  } catch (err) { $("qrError").textContent = err.message; }
+}
+async function openQr() {
+  $("qrModal").classList.add("open");
+  $("qrError").textContent = "";
+  if (!AngloQR.cameraSupported()) {
+    $("scanNote").textContent = "Camera QR scanning is not supported in this browser. Paste the QR contents below.";
+    $("qrPaste").focus();
+    return;
+  }
+  try {
+    stopScanner = await AngloQR.startScanner($("qrVideo"), routeQr, (msg) => { $("qrError").textContent = msg; });
+    $("qrVideo").classList.add("active");
+  } catch (err) {
+    $("scanNote").textContent = "Camera unavailable. Paste the QR contents below.";
+    $("qrError").textContent = err.message;
+    $("qrPaste").focus();
+  }
+}
+function closeQr() {
+  if (stopScanner) stopScanner();
+  stopScanner = null;
+  $("qrVideo").classList.remove("active");
+  $("qrModal").classList.remove("open");
+}
+$("openQr").onclick = openQr;
+$("closeQr").onclick = closeQr;
+$("parseQr").onclick = () => routeQr($("qrPaste").value);
+$("qrModal").addEventListener("click", (e) => { if (e.target === $("qrModal")) closeQr(); });
 </script>
 </body>
 </html>

@@ -20,7 +20,7 @@ node src/server.js
 ```
 
 - Home / station picker: http://localhost:3300/
-- Station screens: http://localhost:3300/station/1 … /station/7
+- Station screens: http://localhost:3300/station/1 … /station/8
 - Live dashboard: http://localhost:3300/dashboard (add `?days=N` to widen/narrow
   the install-date lookback, default 45)
 - Office admin: http://localhost:3300/office — add jobs, set install dates

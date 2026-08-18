@@ -2,7 +2,7 @@
 
 // Direct port of applyCascadeLogic_ from the Google Sheets
 // "MATERIAL PLANNER CORE SCRIPT - v7 FINAL". Field names s1..s7 map to
-// Station 1..7 columns; jobStatus maps to the JOB STATUS column.
+// Station 1..7 columns; Station 8 uses the existing JOB STATUS column.
 
 const STATIONS = {
   1: { key: "s1", name: "Planning",          responsible: "Elvis",           buttons: ["DONE", "RC-X", "CHANGES"] },
@@ -12,6 +12,7 @@ const STATIONS = {
   5: { key: "s5", name: "Saw 2",             responsible: "Richard",         buttons: ["JOB PICKED", "PICK SHORT", "DONE"] },
   6: { key: "s6", name: "Assembly",          responsible: "Portia",          buttons: ["WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "ALL DONE"] },
   7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", buttons: ["DONE", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
+  8: { key: "job_status", name: "Bead saw",  responsible: "Kerabo",          buttons: ["DONE", "BEAD SHORT", "NOT PICKED"] },
 };
 
 const QUEUE_VALUES = ["", "QUEUED", "QUEUE OUT", "0"];
@@ -26,6 +27,9 @@ function applyCascade(job, stationNum, rawValue) {
   const value = norm(rawValue);
   const st = STATIONS[stationNum];
   if (!st) throw new Error("Unknown station " + stationNum);
+  if (stationNum === 8 && !st.buttons.includes(value)) {
+    throw new Error("Invalid Bead Saw status");
+  }
 
   const changes = { [st.key]: value };
   const get = (key) => (key in changes ? changes[key] : norm(job[key]));
@@ -42,6 +46,25 @@ function applyCascade(job, stationNum, rawValue) {
     if (QUEUE_VALUES.includes(s6())) set("s6", "SCHEDULED");
     if (QUEUE_VALUES.includes(s7())) set("s7", "SCHEDULED");
   };
+
+  // Station 8 has no dedicated sheet column. Its visible DONE choice means
+  // "beads complete" in the shared Job Status field, retaining any existing
+  // frames/glass component so either completion order produces a combination.
+  if (stationNum === 8) {
+    if (value !== "DONE") return changes;
+
+    const js = norm(job.job_status);
+    if (["FRAMES-WINDOW", "FRAMES-SHOP", "FRAMES-SLIDER"].includes(js)) {
+      changes.job_status = "FRAMES+BEADS";
+    } else if (js === "GLASS READY") {
+      changes.job_status = "BEADS+GLASS";
+    } else if (["DONE", "BEADS DONE", "FRAMES+BEADS", "BEADS+FRAMES", "BEADS+GLASS", "ALL READY"].includes(js)) {
+      changes.job_status = js;
+    } else {
+      changes.job_status = "BEADS DONE";
+    }
+    return changes;
+  }
 
   if (stationNum === 1) {
     if (value === "DONE" || value === "RC-X") set("s2", "RECEIVED CL");

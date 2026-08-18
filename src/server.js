@@ -336,7 +336,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Anglo planner running at http://localhost:${PORT}`);
-  console.log(`Stations: http://localhost:${PORT}/station/1 .. /station/7`);
+  console.log(`Stations: http://localhost:${PORT}/station/1 .. /station/8`);
   console.log(`Dashboard: http://localhost:${PORT}/dashboard`);
   if (sheetEnabled()) {
     refreshFromSheet();

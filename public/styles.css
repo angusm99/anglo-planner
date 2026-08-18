@@ -146,7 +146,8 @@ button.big:focus-visible, button.theme:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
-input.ref {
+input.ref,
+textarea.ref {
   width: 100%;
   font-size: 30px;
   font-weight: 600;
@@ -159,9 +160,40 @@ input.ref {
   color: var(--fg);
   outline: none;
   font-family: var(--font-body);
+  resize: vertical;
 }
-input.ref::placeholder { color: var(--muted); opacity: 0.5; }
-input.ref:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+input.ref::placeholder,
+textarea.ref::placeholder { color: var(--muted); opacity: 0.5; }
+input.ref:focus,
+textarea.ref:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+.operator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.operator-choice { text-align: left; }
+.operator-choice strong { display: block; color: var(--accent); font-size: 15px; margin-bottom: 5px; }
+.operator-choice span { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+.queue-status { margin-top: 12px; color: var(--muted); font-size: 13px; min-height: 20px; }
+.confirm-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-dim);
+}
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+
+@media (max-width: 620px) {
+  header.app { align-items: flex-start; padding: 11px 12px; }
+  header.app .right { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  header.app .clock { display: none; }
+  main { padding: 12px; }
+  .card { padding: 16px; }
+  .operator-grid { grid-template-columns: 1fr; }
+}
 
 table.jobs { width: 100%; border-collapse: collapse; }
 table.jobs th {

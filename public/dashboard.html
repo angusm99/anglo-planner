@@ -28,7 +28,7 @@
 
   <div class="card" style="padding:10px 16px 16px;">
     <div style="display:flex; gap:16px; font-size:13px; color:var(--muted); padding:10px 4px; align-items:center; flex-wrap:wrap;">
-      <span>Stations 1–7 — hover for status, click a dot to open that station:</span>
+      <span>Stations 1–8 — hover for status, click a dot to open that station:</span>
       <span><span class="dot done"></span> done</span>
       <span><span class="dot prog"></span> in progress</span>
       <span><span class="dot queue"></span> queued</span>
@@ -41,7 +41,7 @@
           <th>Customer</th>
           <th style="width:90px;">Install</th>
           <th style="width:100px;">Colour</th>
-          <th style="width:200px;">Stations 1–7</th>
+          <th style="width:230px;">Stations 1–8</th>
           <th style="width:140px;">Job status</th>
         </tr>
       </thead>
@@ -92,11 +92,11 @@ async function refresh() {
 
   const tbody = document.getElementById("rows");
   tbody.innerHTML = jobs.map(j => {
-    const dots = [j.s1, j.s2, j.s3, j.s4, j.s5, j.s6, j.s7].map((v, i) => {
-      const st = STATIONS[i + 1] || { name: "Station " + (i + 1) };
+    const dots = Object.entries(STATIONS).map(([num, st]) => {
+      const v = j[st.key];
       const display = v && String(v).trim() !== "0" ? v : "—";
-      const label = `Station ${i + 1} — ${st.name}: ${display}`;
-      return `<a class="dot ${classify(v)}" href="/station/${i + 1}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
+      const label = `Station ${num} — ${st.name}: ${display}`;
+      return `<a class="dot ${classify(v)}" href="/station/${num}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
     }).join(" ");
     const js = (j.job_status || "").trim();
     const overdueJob = isOverdue(j);

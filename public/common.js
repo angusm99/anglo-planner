@@ -18,7 +18,8 @@ function themeButtonLabel() {
 
 const DONE_VALUES =["DONE", "DONE-NO PW", "RC-X", "RECEIVED CL", "ALL DONE",
   "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "SLATTED UNITS", "DELIVERED",
-  "FRAMES ONLY", "ALL READY", "GLASS READY", "FRAMES+GLASS", "BEADS+GLASS"];
+  "FRAMES ONLY", "ALL READY", "GLASS READY", "BEADS DONE", "FRAMES+BEADS",
+  "BEADS+FRAMES", "FRAMES+GLASS", "BEADS+GLASS"];
 
 function classify(v) {
   v = String(v || "").toUpperCase().trim();

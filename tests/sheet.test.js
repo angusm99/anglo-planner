@@ -16,6 +16,13 @@ test("maps changed station fields to sheet updates", () => {
   assert.strictEqual(p.task_no, "526889");
 });
 
+test("maps Bead Saw completion to the existing Job Status sheet field", () => {
+  const job = { source_tab: "MAY-2026", task_no: "526889", biz_ref: "D1738" };
+  const payload = buildPayload(job, [{ field: "job_status", from: "", to: "BEADS DONE" }]);
+  assert.deepStrictEqual(payload.updates, { job_status: "BEADS DONE" });
+  assert.ok(!Object.keys(payload.updates).some((key) => /^s[1-7]$/.test(key)));
+});
+
 test("skips office-created jobs (they have no sheet row)", () => {
   const job = { source_tab: "OFFICE", task_no: "", biz_ref: "D9001" };
   assert.strictEqual(buildPayload(job, [{ field: "s1", to: "DONE" }]), null);

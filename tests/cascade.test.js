@@ -2,7 +2,7 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { applyCascade } = require("../src/cascade");
+const { STATIONS, applyCascade } = require("../src/cascade");
 
 const blank = { s1: "", s2: "", s3: "", s4: "", s5: "", s6: "", s7: "", job_status: "" };
 
@@ -85,4 +85,40 @@ test("S7 glass done leaves FRAMES+GLASS unchanged", () => {
   const job = { ...blank, s1: "DONE", job_status: "FRAMES+GLASS" };
   const c = applyCascade(job, 7, "FRAMES ONLY");
   assert.deepStrictEqual(c, { s7: "FRAMES ONLY" });
+});
+
+test("S8 exposes exactly the approved Bead Saw choices", () => {
+  assert.deepStrictEqual(STATIONS[8].buttons, ["DONE", "BEAD SHORT", "NOT PICKED"]);
+  assert.strictEqual(STATIONS[8].key, "job_status");
+  assert.strictEqual(STATIONS[8].responsible, "Kerabo");
+});
+
+test("S8 DONE writes only the Job Status field as beads complete", () => {
+  const c = applyCascade(blank, 8, "DONE");
+  assert.deepStrictEqual(c, { job_status: "BEADS DONE" });
+  assert.ok(!Object.keys(c).some((key) => /^s[1-7]$/.test(key)));
+});
+
+test("S8 short and not-picked choices write directly to Job Status", () => {
+  assert.deepStrictEqual(applyCascade(blank, 8, "BEAD SHORT"), { job_status: "BEAD SHORT" });
+  assert.deepStrictEqual(applyCascade(blank, 8, "NOT PICKED"), { job_status: "NOT PICKED" });
+  assert.throws(() => applyCascade(blank, 8, "CHANGES"), /Invalid Bead Saw status/);
+});
+
+test("S8 DONE after frame completion combines to FRAMES+BEADS", () => {
+  const job = { ...blank, job_status: "FRAMES-WINDOW" };
+  assert.deepStrictEqual(applyCascade(job, 8, "DONE"), { job_status: "FRAMES+BEADS" });
+});
+
+test("S8 does not downgrade an already completed job", () => {
+  const job = { ...blank, job_status: "DONE" };
+  assert.deepStrictEqual(applyCascade(job, 8, "DONE"), { job_status: "DONE" });
+});
+
+test("S6 frame completion after S8 DONE combines to FRAMES+BEADS", () => {
+  const beadChange = applyCascade(blank, 8, "DONE");
+  const job = { ...blank, ...beadChange, s1: "DONE" };
+  assert.deepStrictEqual(applyCascade(job, 6, "WINDOWS DONE"), {
+    s6: "WINDOWS DONE", job_status: "FRAMES+BEADS",
+  });
 });
