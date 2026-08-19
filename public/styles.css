@@ -225,7 +225,8 @@ table.jobs tr.flash td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 label.field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); }
 label.field input,
-label.field textarea {
+label.field textarea,
+label.field select {
   font-size: 15px; padding: 9px 11px;
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface-2); color: var(--fg);
@@ -233,7 +234,8 @@ label.field textarea {
 }
 label.field textarea { resize: vertical; line-height: 1.4; }
 label.field input:focus,
-label.field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+label.field textarea:focus,
+label.field select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 
 .toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);

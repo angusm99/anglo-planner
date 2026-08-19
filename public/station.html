@@ -13,6 +13,16 @@ button.big.status-selected {
   background: var(--accent-dim);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
+.aux-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.aux-actions button.theme {
+  min-height: 42px;
+  font-size: 14px;
+}
 </style>
 </head>
 <body>
@@ -49,6 +59,10 @@ button.big.status-selected {
   </section>
 
   <section id="scanView" class="card" style="display:none;">
+    <div class="aux-actions">
+      <button class="theme" id="operatorBack" type="button">← Operator</button>
+      <button class="theme" id="continueQueue" type="button" style="display:none;">Continue queue</button>
+    </div>
     <h2 style="font-size:17px;margin-bottom:6px;">Scan the job cover, or type the ref</h2>
     <p style="color:var(--muted);font-size:14px;margin-bottom:14px;">Enter one or several Biz Refs/task numbers. Separate them with spaces, commas, semicolons or new lines.</p>
     <form id="refForm" style="display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:10px;align-items:stretch;">
@@ -62,6 +76,9 @@ button.big.status-selected {
   <section id="jobView" class="card" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
       <div>
+        <div class="aux-actions" style="margin-bottom:10px;">
+          <button class="theme" id="refsBack" type="button">← Refs</button>
+        </div>
         <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
           <span id="jobRef" style="font-size:34px;font-weight:700;"></span>
           <span id="jobCustomer" style="font-size:17px;color:var(--muted);"></span>
@@ -85,6 +102,7 @@ button.big.status-selected {
         <button class="big" id="confirmSelection" type="button" style="min-height:58px;border-color:var(--accent);">Confirm selection</button>
       </div>
     </div>
+    <p id="updateError" style="display:none;margin-top:12px;font-size:14px;color:var(--bad);font-weight:600;"></p>
     <p id="cascadeNote" style="margin-top:14px;font-size:14px;color:var(--muted);"></p>
   </section>
 
@@ -92,6 +110,7 @@ button.big.status-selected {
     <h2 style="font-size:19px;color:var(--bad);">REDO — Issue Report</h2>
     <p style="color:var(--muted);font-size:14px;margin-top:6px;">Log the issue, set this station to REDO, and notify Material Despatch with a numbered REPICK.</p>
     <p id="redoAvailability" style="font-size:13px;margin-top:9px;color:var(--bad);"></p>
+    <p id="redoQueueNotice" style="display:none;font-size:13px;margin-top:9px;color:var(--accent);font-weight:600;"></p>
     <div style="margin-top:12px;display:grid;gap:6px;font-size:15px;">
       <div><strong>Date:</strong> <span id="redoDate"></span></div>
       <div><strong>Biz Ref:</strong> <span id="redoRef"></span></div>
@@ -103,10 +122,45 @@ button.big.status-selected {
         <input id="redoUnit" autocomplete="off" maxlength="120" placeholder="D1, W2, Bathroom, Dining Room…" style="font-size:18px;min-height:48px;">
       </label>
       <label class="field">Issue Description
-        <textarea id="redoIssue" rows="3" maxlength="2000" placeholder="Describe the problem…" style="font-size:16px;"></textarea>
+        <select id="redoIssueSelect" style="font-size:18px;min-height:48px;">
+          <option value="">Select issue</option>
+          <option>MATERIAL SHORT</option>
+          <option>MATERIAL SCRATCHED</option>
+          <option>ROUTER-X</option>
+          <option>MILLING-X</option>
+          <option>EXTRA GIVEN</option>
+          <option value="OTHER">OTHER — type details</option>
+        </select>
+      </label>
+      <label class="field" id="redoIssueOtherWrap" style="display:none;">Other Issue Details
+        <textarea id="redoIssueOther" rows="3" maxlength="2000" placeholder="Type the issue details…" style="font-size:16px;"></textarea>
       </label>
       <label class="field">Material Needed (optional)
-        <textarea id="redoMaterial" rows="2" maxlength="2000" placeholder="List materials required…" style="font-size:16px;"></textarea>
+        <select id="redoMaterialSelect" style="font-size:18px;min-height:48px;">
+          <option value="">Select material if needed</option>
+          <option>70mm OF</option>
+          <option>STD MULLION</option>
+          <option>54mm MULLION</option>
+          <option>70mm MULLION</option>
+          <option>SASH</option>
+          <option>BEAD</option>
+          <option>26B REC BACK (W )</option>
+          <option>60mm DOORSTILE</option>
+          <option>90mm DOORSTILE</option>
+          <option>R4</option>
+          <option>R7</option>
+          <option>R6-150mm</option>
+          <option>PALACE DOUBLE BOX JAMB</option>
+          <option>PALACE TRIPLE BOX JAMB</option>
+          <option>PALACE HEAD-DOUBLE</option>
+          <option>PALACE CILL DOUBLE</option>
+          <option>BEAD-SHOPFRONT</option>
+          <option>DG BEADS</option>
+          <option value="OTHER">OTHER — type details</option>
+        </select>
+      </label>
+      <label class="field" id="redoMaterialOtherWrap" style="display:none;">Other / Additional Material
+        <textarea id="redoMaterialOther" rows="2" maxlength="2000" placeholder="Type other or additional material…" style="font-size:16px;"></textarea>
       </label>
     </div>
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -136,6 +190,7 @@ let initialQueued = false;
 let advanceTimer = null;
 let redoReady = false;
 let sheetConnected = false;
+const PREVIEW_MESSAGE = "Preview only — status buttons are disabled because this server has no live Sheet bridge. Start the Windows server with SHEET_WEBAPP_URL and SHEET_TOKEN in the same PowerShell window.";
 
 startClock($("clock"));
 $("themeBtn").textContent = themeButtonLabel();
@@ -206,11 +261,25 @@ $("confirmGuest").onclick = () => confirmOperator($("guestName").value, "guest")
 $("guestName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("confirmGuest").click(); } });
 $("changeOperator").onclick = () => {
   clearTimeout(advanceTimer);
+  resetJobState();
+  refQueue = [];
   cancelConfirmation();
   operatorName = "";
   operatorType = "";
   $("changeOperator").style.display = "none";
   $("stWho").textContent = "Choose an operator to continue";
+  $("scanView").style.display = "none";
+  $("jobView").style.display = "none";
+  $("redoView").style.display = "none";
+  $("operatorView").style.display = "block";
+  restoreOperatorHint();
+};
+
+$("operatorBack").onclick = () => {
+  clearTimeout(advanceTimer);
+  resetJobState();
+  refQueue = [];
+  cancelConfirmation();
   $("scanView").style.display = "none";
   $("jobView").style.display = "none";
   $("redoView").style.display = "none";
@@ -231,6 +300,10 @@ $("refForm").addEventListener("submit", (e) => {
   renderQueue();
   if (!currentRef && !job) processNextRef();
 });
+
+$("continueQueue").onclick = () => {
+  if (!currentRef && !job && refQueue.length) processNextRef();
+};
 
 async function processNextRef() {
   job = null;
@@ -299,6 +372,7 @@ function showJob(value) {
   renderButtons();
   cancelConfirmation();
   $("cascadeNote").textContent = "";
+  showUpdateError("");
 }
 
 function renderCurrent() {
@@ -316,7 +390,10 @@ function renderButtons() {
     b.textContent = value;
     b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value, b);
     if (value === "REDO") b.style.cssText = "border-color:var(--bad);color:var(--bad);font-weight:700;";
-    else b.disabled = !sheetConnected;
+    else {
+      b.disabled = !sheetConnected;
+      b.title = sheetConnected ? "" : PREVIEW_MESSAGE;
+    }
     $("buttons").appendChild(b);
   }
 }
@@ -324,12 +401,16 @@ function renderButtons() {
 function renderSheetAvailability() {
   const notice = $("sheetNotice");
   if (!notice) return;
-  notice.style.display = sheetConnected ? "none" : "block";
-  notice.textContent = "Preview only — the Google Sheet bridge is off, so status updates are disabled.";
+  notice.style.display = "block";
+  notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
+  notice.textContent = sheetConnected
+    ? "Live Google Sheet connected — confirmed status updates will save to the Material Planner."
+    : PREVIEW_MESSAGE;
   if (job) renderButtons();
 }
 
 function askConfirmation(value, button) {
+  showUpdateError("");
   pendingValue = value;
   pendingButton?.classList.remove("status-selected");
   pendingButton?.setAttribute("aria-pressed", "false");
@@ -354,7 +435,13 @@ $("clearSelection").onclick = cancelConfirmation;
 $("confirmSelection").onclick = () => { if (pendingValue) submit(pendingValue); };
 
 async function submit(value) {
-  if (!sheetConnected) { toast("Sheet bridge is off — update not saved"); return; }
+  showUpdateError("");
+  if (!sheetConnected) {
+    const message = "Sheet bridge is off — update not saved";
+    showUpdateError(message);
+    toast(message);
+    return;
+  }
   $("confirmSelection").disabled = true;
   let result;
   try {
@@ -367,7 +454,11 @@ async function submit(value) {
     if (!response.ok && !result.error) result.error = "Update failed";
   } catch (_) { result = { error: "No connection — check WiFi and try again" }; }
   $("confirmSelection").disabled = false;
-  if (result.error) { toast("Error: " + result.error); return; }
+  if (result.error) {
+    showUpdateError(`Update not saved: ${result.error}`);
+    toast("Error: " + result.error);
+    return;
+  }
 
   job = result.job;
   renderCurrent();
@@ -377,22 +468,48 @@ async function submit(value) {
   $("cascadeNote").textContent = others.length ? "Also updated: " + others.map(c => `${names[c.field]} → ${c.to}`).join(", ") : "";
   toast(`Saved ✓ ${value} · ${operatorName}`);
   clearTimeout(advanceTimer);
-  advanceTimer = setTimeout(nextJob, 3500);
+  if (refQueue.length) {
+    $("jobQueueStatus").textContent = `${refQueue.length} remaining — loading next job…`;
+    advanceTimer = setTimeout(nextJob, 1200);
+  } else {
+    $("jobQueueStatus").textContent = "No more queued references.";
+    advanceTimer = setTimeout(nextJob, 2400);
+  }
 }
 
 function nextJob() {
   clearTimeout(advanceTimer);
   cancelConfirmation();
-  job = null;
-  currentRef = "";
+  resetJobState();
   $("redoView").style.display = "none";
   processNextRef();
 }
 $("backBtn").onclick = nextJob;
 
+$("refsBack").onclick = () => {
+  clearTimeout(advanceTimer);
+  const ref = currentRef || job?.biz_ref || job?.task_no || "";
+  if (ref) refQueue.unshift(String(ref).toUpperCase());
+  resetJobState();
+  cancelConfirmation();
+  $("jobView").style.display = "none";
+  $("redoView").style.display = "none";
+  $("scanView").style.display = "block";
+  $("matches").innerHTML = "";
+  renderQueue();
+  $("refInput").focus();
+};
+
+function resetJobState() {
+  job = null;
+  currentRef = "";
+  showUpdateError("");
+}
+
 function renderQueue(message) {
   const text = message || (currentRef ? `Processing ${currentRef} · ${refQueue.length} remaining` : refQueue.length ? `${refQueue.length} references queued` : "Ready for references");
   $("queueStatus").textContent = text;
+  $("continueQueue").style.display = (!currentRef && !job && refQueue.length) ? "inline-block" : "none";
 }
 
 function renderRedoAvailability() {
@@ -406,13 +523,25 @@ function renderRedoAvailability() {
 
 function showRedoForm() {
   cancelConfirmation();
+  if (refQueue.length) {
+    refQueue = [];
+    $("redoQueueNotice").style.display = "block";
+    $("redoQueueNotice").textContent = "REDO is single-reference. Remaining queued refs have been cleared.";
+  } else {
+    $("redoQueueNotice").style.display = "none";
+    $("redoQueueNotice").textContent = "";
+  }
   $("redoDate").textContent = new Date().toLocaleDateString("en-ZA");
   $("redoRef").textContent = job.biz_ref || job.task_no;
   $("redoStation").textContent = `Station ${stationNum} — ${stationCfg.name}`;
   $("redoOperator").textContent = operatorName;
   $("redoUnit").value = "";
-  $("redoIssue").value = "";
-  $("redoMaterial").value = "";
+  $("redoIssueSelect").value = "";
+  $("redoIssueOther").value = "";
+  $("redoIssueOtherWrap").style.display = "none";
+  $("redoMaterialSelect").value = "";
+  $("redoMaterialOther").value = "";
+  $("redoMaterialOtherWrap").style.display = "none";
   $("jobView").style.display = "none";
   $("redoView").style.display = "block";
   renderRedoAvailability();
@@ -424,13 +553,31 @@ $("redoCancel").onclick = () => {
   $("jobView").style.display = "block";
 };
 
+$("redoIssueSelect").onchange = () => {
+  const isOther = $("redoIssueSelect").value === "OTHER";
+  $("redoIssueOtherWrap").style.display = isOther ? "flex" : "none";
+  if (isOther) $("redoIssueOther").focus();
+};
+
+$("redoMaterialSelect").onchange = () => {
+  const isOther = $("redoMaterialSelect").value === "OTHER";
+  $("redoMaterialOtherWrap").style.display = isOther ? "flex" : "none";
+  if (isOther) $("redoMaterialOther").focus();
+};
+
 $("redoSubmit").onclick = async () => {
   if (!redoReady) { toast("REDO is locked until the v2 bridge is deployed"); return; }
   const unit = $("redoUnit").value.trim();
-  const issue = $("redoIssue").value.trim();
-  const material = $("redoMaterial").value.trim();
+  const issueChoice = $("redoIssueSelect").value.trim();
+  const issueOther = $("redoIssueOther").value.trim();
+  const materialChoice = $("redoMaterialSelect").value.trim();
+  const materialOther = $("redoMaterialOther").value.trim();
+  const issue = issueChoice === "OTHER" ? `OTHER - ${issueOther}` : issueChoice;
+  const material = materialChoice === "OTHER" ? `OTHER - ${materialOther}` : materialChoice;
   if (!unit) { toast("Enter the affected unit"); $("redoUnit").focus(); return; }
-  if (!issue) { toast("Enter the issue description"); $("redoIssue").focus(); return; }
+  if (!issueChoice) { toast("Select the issue"); $("redoIssueSelect").focus(); return; }
+  if (issueChoice === "OTHER" && !issueOther) { toast("Enter Other Issue Details"); $("redoIssueOther").focus(); return; }
+  if (materialChoice === "OTHER" && !materialOther) { toast("Enter Other / Additional Material"); $("redoMaterialOther").focus(); return; }
 
   $("redoSubmit").disabled = true;
   let result;
@@ -454,8 +601,24 @@ $("redoSubmit").onclick = async () => {
   $("cascadeNote").textContent = `REDO logged (cycle ${result.cycle}).${despatch ? ` Despatch → ${despatch.to}` : ""}`;
   toast(`REDO report submitted ✓ Cycle ${result.cycle}`);
   clearTimeout(advanceTimer);
-  advanceTimer = setTimeout(nextJob, 4500);
+  resetJobState();
+  currentRef = "";
+  refQueue = [];
+  advanceTimer = setTimeout(() => {
+    $("redoView").style.display = "none";
+    $("jobView").style.display = "none";
+    $("scanView").style.display = "block";
+    renderQueue();
+    $("refInput").focus();
+  }, 2400);
 };
+
+function showUpdateError(message) {
+  const error = $("updateError");
+  if (!error) return;
+  error.textContent = message || "";
+  error.style.display = message ? "block" : "none";
+}
 
 let toastTimer;
 function toast(message) {
