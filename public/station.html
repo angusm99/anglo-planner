@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Station — Anglo planner</title>
+<link rel="icon" href="data:,">
 <script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -67,6 +68,7 @@
     <div style="margin:14px 0 10px;display:flex;align-items:center;gap:10px;">
       <span style="font-size:14px;color:var(--muted);">This station now:</span><span class="pill queue" id="currentVal">—</span>
     </div>
+    <p id="sheetNotice" style="display:none;margin-bottom:12px;font-size:13px;color:var(--bad);"></p>
     <div id="buttons" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"></div>
     <div id="confirmPanel" class="confirm-panel" style="display:none;">
       <strong id="confirmTitle">Confirm update</strong>
@@ -77,6 +79,33 @@
       </div>
     </div>
     <p id="cascadeNote" style="margin-top:14px;font-size:14px;color:var(--muted);"></p>
+  </section>
+
+  <section id="redoView" class="card" style="display:none;">
+    <h2 style="font-size:19px;color:var(--bad);">REDO — Issue Report</h2>
+    <p style="color:var(--muted);font-size:14px;margin-top:6px;">Log the issue, set this station to REDO, and notify Material Despatch with a numbered REPICK.</p>
+    <p id="redoAvailability" style="font-size:13px;margin-top:9px;color:var(--bad);"></p>
+    <div style="margin-top:12px;display:grid;gap:6px;font-size:15px;">
+      <div><strong>Date:</strong> <span id="redoDate"></span></div>
+      <div><strong>Biz Ref:</strong> <span id="redoRef"></span></div>
+      <div><strong>Station:</strong> <span id="redoStation"></span></div>
+      <div><strong>Operator:</strong> <span id="redoOperator"></span></div>
+    </div>
+    <div style="margin-top:14px;display:grid;gap:12px;">
+      <label class="field">Affected Unit (e.g. D1, W2, Bathroom)
+        <input id="redoUnit" autocomplete="off" maxlength="120" placeholder="D1, W2, Bathroom, Dining Room…" style="font-size:18px;min-height:48px;">
+      </label>
+      <label class="field">Issue Description
+        <textarea id="redoIssue" rows="3" maxlength="2000" placeholder="Describe the problem…" style="font-size:16px;"></textarea>
+      </label>
+      <label class="field">Material Needed (optional)
+        <textarea id="redoMaterial" rows="2" maxlength="2000" placeholder="List materials required…" style="font-size:16px;"></textarea>
+      </label>
+    </div>
+    <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <button class="big" id="redoCancel" type="button" style="min-height:58px;">Cancel</button>
+      <button class="big" id="redoSubmit" type="button" style="min-height:58px;border-color:var(--bad);color:var(--bad);font-weight:700;">Submit REDO Report</button>
+    </div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -97,6 +126,8 @@ let refQueue = [];
 let pendingValue = "";
 let initialQueued = false;
 let advanceTimer = null;
+let redoReady = false;
+let sheetConnected = false;
 
 startClock($("clock"));
 $("themeBtn").textContent = themeButtonLabel();
@@ -114,6 +145,18 @@ fetch("/api/stations").then(r => r.json()).then(all => {
   }
   restoreOperatorHint();
 }).catch(() => { $("stWho").textContent = "Server unavailable"; });
+
+fetch("/api/capabilities").then(r => r.json()).then(value => {
+  sheetConnected = value.sheet === true;
+  redoReady = value.redo === true;
+  renderRedoAvailability();
+  renderSheetAvailability();
+}).catch(() => {
+  sheetConnected = false;
+  redoReady = false;
+  renderRedoAvailability();
+  renderSheetAvailability();
+});
 
 function restoreOperatorHint() {
   try {
@@ -162,6 +205,7 @@ $("changeOperator").onclick = () => {
   $("stWho").textContent = "Choose an operator to continue";
   $("scanView").style.display = "none";
   $("jobView").style.display = "none";
+  $("redoView").style.display = "none";
   $("operatorView").style.display = "block";
   restoreOperatorHint();
 };
@@ -237,6 +281,7 @@ function showJob(value) {
   job = value;
   $("scanView").style.display = "none";
   $("jobView").style.display = "block";
+  $("redoView").style.display = "none";
   $("jobRef").textContent = value.biz_ref || value.task_no;
   $("jobCustomer").textContent = value.customer;
   $("jobMeta").textContent = `Install ${fmtDate(value.install_date)} · ${value.colour || "no colour"} · task ${value.task_no || "—"}` + (value.glasslist ? " · glasslist" : "");
@@ -261,9 +306,19 @@ function renderButtons() {
     const b = document.createElement("button");
     b.className = "big";
     b.textContent = value;
-    b.onclick = () => askConfirmation(value);
+    b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value);
+    if (value === "REDO") b.style.cssText = "border-color:var(--bad);color:var(--bad);font-weight:700;";
+    else b.disabled = !sheetConnected;
     $("buttons").appendChild(b);
   }
+}
+
+function renderSheetAvailability() {
+  const notice = $("sheetNotice");
+  if (!notice) return;
+  notice.style.display = sheetConnected ? "none" : "block";
+  notice.textContent = "Preview only — the Google Sheet bridge is off, so status updates are disabled.";
+  if (job) renderButtons();
 }
 
 function askConfirmation(value) {
@@ -282,6 +337,7 @@ $("cancelUpdate").onclick = cancelConfirmation;
 $("confirmUpdate").onclick = () => { if (pendingValue) submit(pendingValue); };
 
 async function submit(value) {
+  if (!sheetConnected) { toast("Sheet bridge is off — update not saved"); return; }
   $("confirmUpdate").disabled = true;
   let result;
   try {
@@ -312,6 +368,7 @@ function nextJob() {
   cancelConfirmation();
   job = null;
   currentRef = "";
+  $("redoView").style.display = "none";
   processNextRef();
 }
 $("backBtn").onclick = nextJob;
@@ -320,6 +377,68 @@ function renderQueue(message) {
   const text = message || (currentRef ? `Processing ${currentRef} · ${refQueue.length} remaining` : refQueue.length ? `${refQueue.length} references queued` : "Ready for references");
   $("queueStatus").textContent = text;
 }
+
+function renderRedoAvailability() {
+  if (!$("redoAvailability")) return;
+  $("redoAvailability").textContent = redoReady
+    ? "ISSUE LOG bridge ready."
+    : "Preview only — REDO submission is locked until the v2 ISSUE LOG bridge is deployed.";
+  $("redoAvailability").style.color = redoReady ? "var(--done)" : "var(--bad)";
+  $("redoSubmit").disabled = !redoReady;
+}
+
+function showRedoForm() {
+  cancelConfirmation();
+  $("redoDate").textContent = new Date().toLocaleDateString("en-ZA");
+  $("redoRef").textContent = job.biz_ref || job.task_no;
+  $("redoStation").textContent = `Station ${stationNum} — ${stationCfg.name}`;
+  $("redoOperator").textContent = operatorName;
+  $("redoUnit").value = "";
+  $("redoIssue").value = "";
+  $("redoMaterial").value = "";
+  $("jobView").style.display = "none";
+  $("redoView").style.display = "block";
+  renderRedoAvailability();
+  $("redoUnit").focus();
+}
+
+$("redoCancel").onclick = () => {
+  $("redoView").style.display = "none";
+  $("jobView").style.display = "block";
+};
+
+$("redoSubmit").onclick = async () => {
+  if (!redoReady) { toast("REDO is locked until the v2 bridge is deployed"); return; }
+  const unit = $("redoUnit").value.trim();
+  const issue = $("redoIssue").value.trim();
+  const material = $("redoMaterial").value.trim();
+  if (!unit) { toast("Enter the affected unit"); $("redoUnit").focus(); return; }
+  if (!issue) { toast("Enter the issue description"); $("redoIssue").focus(); return; }
+
+  $("redoSubmit").disabled = true;
+  let result;
+  try {
+    const response = await fetch("/api/redo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, station: stationNum, actor: operatorName, unit, issue, material }),
+    });
+    result = await response.json();
+    if (!response.ok && !result.error) result.error = "REDO submission failed";
+  } catch (_) { result = { error: "No connection — check WiFi and try again" }; }
+  $("redoSubmit").disabled = !redoReady;
+  if (result.error) { toast("Error: " + result.error); return; }
+
+  job = result.job;
+  $("redoView").style.display = "none";
+  $("jobView").style.display = "block";
+  renderCurrent();
+  const despatch = result.applied.find(change => change.field === "s3");
+  $("cascadeNote").textContent = `REDO logged (cycle ${result.cycle}).${despatch ? ` Despatch → ${despatch.to}` : ""}`;
+  toast(`REDO report submitted ✓ Cycle ${result.cycle}`);
+  clearTimeout(advanceTimer);
+  advanceTimer = setTimeout(nextJob, 4500);
+};
 
 let toastTimer;
 function toast(message) {

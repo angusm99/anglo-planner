@@ -10,6 +10,7 @@ const DB_PATH = path.join(DATA_DIR, "planner.db");
 function open() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH);
+  db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
@@ -48,6 +49,22 @@ function open() {
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
     CREATE INDEX IF NOT EXISTS idx_events_job ON events (job_id);
+
+    CREATE TABLE IF NOT EXISTS issues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER NOT NULL REFERENCES jobs (id),
+      biz_ref TEXT NOT NULL,
+      station INTEGER NOT NULL CHECK (station BETWEEN 1 AND 7),
+      operator TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      issue TEXT NOT NULL,
+      material TEXT DEFAULT '',
+      cycle INTEGER NOT NULL CHECK (cycle > 0),
+      repick_done INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now','localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_issues_biz_ref ON issues (biz_ref);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_issues_cycle ON issues (biz_ref, unit, cycle);
   `);
   return db;
 }

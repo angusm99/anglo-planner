@@ -9,8 +9,9 @@ Dashboard" (`ANGLO WINDOWS/ANGLO CORE/06 - Software and Systems/`), but if you
 don't have access to that vault, this README plus the code is enough to work
 from — don't reconstruct the app from memory of an earlier chat session.
 
-Factory-floor planner app: station tablets + live W.I.P dashboard + office
-admin, replacing direct edits to the Google Sheets planner. Zero npm
+Factory-floor planner app: station tablets + live W.I.P dashboard, replacing
+direct factory-floor edits to the Google Sheets planner. The Google Sheet
+remains the system of record. Zero npm
 dependencies — plain Node (v22+) with the built-in SQLite module.
 
 ## Run
@@ -23,10 +24,9 @@ node src/server.js
 - Station screens: http://localhost:3300/station/1 … /station/8
 - Live dashboard: http://localhost:3300/dashboard (add `?days=N` to widen/narrow
   the install-date lookback, default 45)
-- Office admin: http://localhost:3300/office — add jobs, set install dates
-  (inline date picker per row), override job status, archive/restore. Undated
-  queue jobs sort first so they get dates. Every change lands in the events
-  audit log.
+- Legacy office admin: http://localhost:3300/office — retained in the codebase,
+  but deliberately not linked from the factory landing page or included in the
+  current rollout scope.
 
 Each tablet on the floor gets pinned (kiosk mode) to its own station URL.
 
@@ -66,19 +66,22 @@ sheet-imported jobs**. Jobs added in the office app survive a re-import.
 |---|---|---|
 | Cascade engine | `src/cascade.js` | Line-for-line port of the sheet's "MATERIAL PLANNER CORE SCRIPT v7" `applyCascadeLogic_`, incl. the combined job-status guard logic. Station button sets live here too. |
 | API + SSE server | `src/server.js` | REST endpoints + `GET /api/stream` server-sent events; dashboard updates the moment any station posts. |
-| Database | `src/db.js` → `data/planner.db` | `jobs` table mirrors the planner columns; `events` is the audit log (every change: field, old → new, who, which station, when). |
-| Station UI | `public/station.html` | Ref lookup (type or USB/QR scanner acting as keyboard) → one job → only that station's valid status buttons. |
-| Dashboard UI | `public/dashboard.html` | Due-date sorted active jobs, 7 station dots per job, counters, shorts alert. |
-| Office UI | `public/office.html` | Search (ref / task no / customer), add jobs, inline install-date edits, job-status override with suggestions, archive/restore, per-job change history. |
+| Database | `src/db.js` → `data/planner.db` | Local cache only. `jobs` mirrors planner columns; `events` audits changes; `issues` tracks numbered REDO cycles. |
+| Station UI | `public/station.html` | Ref/QR lookup → operator confirmation → only that station's approved status buttons. Updates are disabled when the Sheet bridge is unavailable. |
+| Dashboard UI | `public/dashboard.html` | Due-date sorted active jobs, 8 station dots per job, counters, shorts alert. |
+| REDO rules | `src/redo.js` | Validates issue reports and produces numbered `REPICKn` / `REDONEn` transitions. |
+| Office UI | `public/office.html` | Legacy utility retained but not exposed on the factory landing page. |
 
-Tests: `npm test` (cascade scenarios, 14 cases).
+Tests: `npm test` (46 cascade, QR, Sheet-payload, REDO and bridge-contract checks).
 
 ## Sheet sync (sheet stays master)
 
 Two-way, via one GAS web app on the sheet (`tools/sheet-writeback.gs`):
 
-- **Writeback** — every station tap (plus its cascade) is written straight
-  into the sheet's station columns.
+- **Confirmed writeback** — every station tap (plus its cascade) is written to
+  the Sheet first. The tablet reports success and updates the local cache only
+  after Apps Script returns `{ "ok": true }`. If the bridge is unavailable,
+  status buttons are disabled and the API changes nothing.
 - **Live read** — lookups that miss the local cache query the sheet directly,
   so a job added to the sheet five minutes ago is findable on the floor with
   no import step. The full cache also re-pulls from the sheet every 10 minutes
@@ -91,23 +94,38 @@ SHEET_WEBAPP_URL = <the /exec URL of the deployed web app>
 SHEET_TOKEN      = <shared secret, same as the sheet's PLANNER_TOKEN>
 ```
 
-Deploy the endpoint once: paste `tools/sheet-writeback.gs` into the sheet's
+The currently deployed station bridge can use `tools/sheet-writeback.gs`.
+Deploy the endpoint once: paste it into the sheet's
 Apps Script project and publish it as a Web App (full steps in that file). It
 runs as you, so it can write protected ranges; the planner posts to it with
 Node's built-in `https` — no extra dependency. Column mapping matches
 `tools/export_xlsx.py` (A = task no, O–U = stations 1–7, V = job status).
 
-Office edits are **not** pushed (office-only jobs have no sheet row). If you want
-office install-date/status edits to push too, call `pushStationUpdate` from
-`editJob` the same way `updateStation` does.
+Office edits are **not** pushed (office-only jobs have no Sheet row).
+
+### REDO / REPICK workflow (staged, not live yet)
+
+`tools/standalone-tablet-bridge.gs` is the reviewed v2 replacement bridge. It
+adds the exact nine-column `ISSUE LOG`, idempotent issue submission, numbered
+`REPICKn` / `REDONEn`, and a named installable `handleIssueLogEdit` trigger. It
+does **not** define another `onEdit`, so it cannot replace or conflict with the
+planner's existing `plannerCore.gs` trigger.
+
+REDO remains visibly locked until the deployed bridge advertises both
+`issue_log` and `repick_done` capabilities. To activate it, replace the
+standalone bridge code, deploy a new web-app version, and run
+`installIssueLogTrigger()` once. Do not replace `plannerCore.gs`.
 
 ## Phase 2
 
 Done:
 - Office/admin view: add jobs, edit install dates, send-to-dash, job-status overrides
-- Station → sheet writeback (above)
+- Confirmed Station → Sheet writeback (Sheet stays master)
+- Cover-sheet QR scanning and Station 8 Bead Saw
+- Reviewed REDO UI, rules and v2 bridge package (activation pending)
 
 Still to build:
-- Cover-sheet printing with QR codes; camera scanning on tablets
+- Deploy and live-prove the v2 REDO bridge and ISSUE LOG trigger
+- Cover-sheet QR printing workflow
 - Calendar checker sync port; lead-time reports from the events table
 - Simple PIN per station / user accounts before factory rollout

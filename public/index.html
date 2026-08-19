@@ -46,7 +46,7 @@
   <div class="hero">
     <img class="logo" src="/anglo-logo.png" alt="Anglo Windows">
     <div class="subtitle">FACTORY TERMINAL</div>
-    <div class="statusline"><span id="sysDot" class="on">●</span> <span id="sys">CONNECTING…</span> · GOOGLE SHEET MASTER · <span id="clock">—</span></div>
+    <div class="statusline"><span id="sysDot" class="on">●</span> <span id="sys">CONNECTING…</span> · <span id="sheetState">CHECKING SHEET…</span> · <span id="clock">—</span></div>
   </div>
   <div class="menu" id="stations"></div>
   <button class="qr-button" id="openQr" type="button">▣ &nbsp; SCAN COVER-SHEET QR CODE</button>
@@ -81,6 +81,13 @@ fetch("/api/stations").then(r => r.json()).then(stations => {
 }).catch(() => {
   $("sys").textContent = "OFFLINE — SERVER UNREACHABLE";
   $("sysDot").className = "off";
+});
+fetch("/api/capabilities").then(r => r.json()).then(state => {
+  $("sheetState").textContent = state.sheet ? "GOOGLE SHEET MASTER CONNECTED" : "LOCAL PREVIEW — SHEET OFF";
+  $("sheetState").className = state.sheet ? "on" : "off";
+}).catch(() => {
+  $("sheetState").textContent = "SHEET STATUS UNAVAILABLE";
+  $("sheetState").className = "off";
 });
 
 let stopScanner = null;

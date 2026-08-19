@@ -87,6 +87,20 @@ test("S7 glass done leaves FRAMES+GLASS unchanged", () => {
   assert.deepStrictEqual(c, { s7: "FRAMES ONLY" });
 });
 
+test("S7 informational statuses never trigger glass completion", () => {
+  for (const value of ["FRAMES ONLY", "FRAMELESS", "CNC-DG READY"]) {
+    assert.deepStrictEqual(applyCascade(blank, 7, value), { s7: value });
+  }
+});
+
+test("S7 completion statuses still trigger the glass cascade", () => {
+  for (const value of ["DONE", "SLATTED UNITS", "DELIVERED"]) {
+    assert.deepStrictEqual(applyCascade({ ...blank, s1: "DONE" }, 7, value), {
+      s7: value, job_status: "GLASS READY",
+    });
+  }
+});
+
 test("S8 exposes exactly the approved Bead Saw choices", () => {
   assert.deepStrictEqual(STATIONS[8].buttons, ["DONE", "BEAD SHORT", "NOT PICKED"]);
   assert.strictEqual(STATIONS[8].key, "job_status");
@@ -121,4 +135,29 @@ test("S6 frame completion after S8 DONE combines to FRAMES+BEADS", () => {
   assert.deepStrictEqual(applyCascade(job, 6, "WINDOWS DONE"), {
     s6: "WINDOWS DONE", job_status: "FRAMES+BEADS",
   });
+});
+
+test("Stations 1 to 7 expose the approved revised status lists", () => {
+  const expected = {
+    1: ["QUEUED", "DONE", "RC-X", "CHANGES", "DONE-NO PW", "REDO"],
+    2: ["QUEUED", "RECEIVED CL", "DONE", "W.O.D", "ALL DLVD", "MILL PREP", "DONE-NO PW", "CUTPLAN RUN", "0", "REDO"],
+    3: ["QUEUED", "DONE", "0", "SCHEDULED", "PICK SHORT", "DEFECT-M", "DONE-NO PW", "ALLOCATED", "SASH PICKED", "SASH SHORT", "REDO"],
+    4: ["QUEUED", "DONE", "0", "REDO", "JOB PICKED", "PICK SHORT", "DEFECT", "DONE-NO PW", "W.I.P", "CUT-SHORT", "PICK TROLLEY"],
+    5: ["QUEUED", "DONE", "0", "REDO", "SCHEDULED", "JOB PICKED", "W.I.P", "DEFECT-M", "DONE-NO PW", "PICK SHORT", "PICK TROLLEY"],
+    6: ["QUEUED", "ALL DONE", "0", "SCHEDULED", "JOB PICKED", "W.I.P", "DONE-NO PW", "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "REDO"],
+    7: ["QUEUE OUT", "QUEUE IN", "DONE", "REDO", "0", "W.I.P", "ORDER DUE", "DONE-NO PW", "SCHEDULED", "FRAMELESS", "CNC-DG READY", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"],
+  };
+  for (let station = 1; station <= 7; station++) assert.deepStrictEqual(STATIONS[station].buttons, expected[station]);
+});
+
+test("REDO on Stations 1 to 7 is flagged and never cascades", () => {
+  for (let station = 1; station <= 7; station++) {
+    assert.deepStrictEqual(applyCascade(blank, station, "REDO"), {
+      [STATIONS[station].key]: "REDO", _redo: true,
+    });
+  }
+});
+
+test("unsupported station statuses are rejected", () => {
+  assert.throws(() => applyCascade(blank, 1, "BEAD SHORT"), /Invalid status/);
 });

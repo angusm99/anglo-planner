@@ -5,11 +5,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { open } = require("./db");
 const { STATIONS, applyCascade, norm } = require("./cascade");
-const { pushStationUpdate, fetchSheetJobs, sheetEnabled } = require("./sheet");
+const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
+const {
+  pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
+  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled,
+} = require("./sheet");
 
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const db = open();
+let redoBridgeReady = false;
+const redoInFlight = new Set();
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -126,6 +132,13 @@ async function refreshFromSheet() {
   return jobs.length;
 }
 
+async function refreshSheetCapabilities() {
+  const capabilities = await fetchSheetCapabilities();
+  redoBridgeReady = capabilities.includes("issue_log") && capabilities.includes("repick_done");
+  console.log(`[sheet] REDO bridge: ${redoBridgeReady ? "READY" : "NOT READY"}`);
+  return capabilities;
+}
+
 const EDITABLE_FIELDS = [
   "task_no", "biz_ref", "customer", "colour", "install_date", "send_to_dash",
   "qty_windows", "qty_hinged", "qty_folding", "qty_palace", "qty_specials", "qty_elite",
@@ -217,37 +230,164 @@ function editJob(id, body) {
   return { job: fresh, applied };
 }
 
-function updateStation(body) {
-  const { jobId, station, value, actor, source } = body;
-  const job = getJob(jobId);
-  if (!job) return { error: "Job not found" };
+const STATION_FIELDS = new Set(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "job_status"]);
 
-  let changes;
-  if (station === "job_status") {
-    changes = { job_status: norm(value) };
-  } else {
-    const stNum = Number(station);
-    if (!STATIONS[stNum]) return { error: "Invalid station" };
-    changes = applyCascade(job, stNum, value);
-  }
-
+function writeJobChanges(job, changes, actor, source) {
   const applied = [];
   const insertEvent = db.prepare(
     `INSERT INTO events (job_id, field, old_value, new_value, actor, source) VALUES (?,?,?,?,?,?)`
   );
   for (const [field, newValue] of Object.entries(changes)) {
+    if (!STATION_FIELDS.has(field)) throw new Error(`Invalid station field: ${field}`);
     const oldValue = norm(job[field]);
     if (oldValue === newValue) continue;
     db.prepare(`UPDATE jobs SET ${field} = ?, updated_at = datetime('now','localtime') WHERE id = ?`)
-      .run(newValue, jobId);
-    insertEvent.run(jobId, field, oldValue, newValue, String(actor || ""), String(source || ""));
+      .run(newValue, job.id);
+    insertEvent.run(job.id, field, oldValue, newValue, String(actor || ""), String(source || ""));
     applied.push({ field, from: oldValue, to: newValue });
   }
+  return applied;
+}
+
+function applyJobChanges(job, changes, actor, source) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const applied = writeJobChanges(job, changes, actor, source);
+    db.exec("COMMIT");
+    return applied;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+async function updateStation(body) {
+  const { jobId, station, value, actor, source } = body;
+  const job = getJob(jobId);
+  if (!job) return { error: "Job not found" };
+  if (!sheetEnabled()) return { error: "Live Google Sheet bridge is unavailable; nothing was changed" };
+
+  let changes;
+  const stNum = Number(station);
+  if (!STATIONS[stNum]) return { error: "Invalid station" };
+  changes = applyCascade(job, stNum, value);
+  if (changes._redo) return { error: "Use the REDO issue report instead" };
+
+  const planned = Object.entries(changes).map(([field, newValue]) => ({
+    field, from: norm(job[field]), to: newValue,
+  })).filter((change) => change.from !== change.to);
+  if (planned.length && !await pushStationUpdateConfirmed(job, planned)) {
+    return { error: "Google Sheet did not confirm the update; nothing was changed" };
+  }
+
+  const applied = applyJobChanges(job, changes, actor, source);
 
   const fresh = getJob(jobId);
   broadcast("job-updated", { jobId, applied });
-  pushStationUpdate(fresh, applied); // mirror the tap into the sheet (sheet stays master)
   return { job: fresh, applied };
+}
+
+async function submitRedo(body) {
+  if (!sheetEnabled()) return { error: "REDO requires the live Sheet bridge" };
+  if (!redoBridgeReady) return { error: "REDO is locked until the v2 ISSUE LOG bridge is deployed" };
+
+  let input;
+  try { input = cleanRedoInput(body); } catch (err) { return { error: err.message }; }
+  const job = getJob(input.jobId);
+  if (!job) return { error: "Job not found" };
+  const bizRef = norm(job.biz_ref);
+  if (!bizRef) return { error: "REDO requires a Biz Ref" };
+  if (!job.source_tab || job.source_tab === "OFFICE") return { error: "REDO requires a job from the live Sheet" };
+
+  const lockKey = `${bizRef}|${input.unit}`;
+  if (redoInFlight.has(lockKey)) return { error: "This REDO is already being submitted" };
+  redoInFlight.add(lockKey);
+  try {
+    const row = db.prepare(
+      "SELECT COALESCE(MAX(cycle), 0) + 1 AS cycle FROM issues WHERE UPPER(biz_ref) = ? AND UPPER(unit) = ?"
+    ).get(bizRef, input.unit);
+    const cycle = Number(row.cycle);
+    const issueForSheet = {
+      source_tab: job.source_tab, task_no: job.task_no || "",
+      biz_ref: bizRef, station: input.station, operator: input.actor,
+      unit: input.unit, issue: input.issue, material: input.material,
+      cycle, created_at: new Date().toISOString(),
+    };
+
+    if (!await pushIssueLog(issueForSheet)) {
+      return { error: "ISSUE LOG did not confirm the report; nothing was changed" };
+    }
+
+    let issueId;
+    let applied;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const info = db.prepare(
+        `INSERT INTO issues (job_id, biz_ref, station, operator, unit, issue, material, cycle)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(job.id, bizRef, input.station, input.actor, input.unit, input.issue, input.material, cycle);
+      issueId = Number(info.lastInsertRowid);
+      applied = writeJobChanges(job, redoChanges(input.station, cycle), input.actor, `redo-station-${input.station}`);
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+
+    const fresh = getJob(job.id);
+    broadcast("job-updated", { jobId: job.id, applied });
+    return { job: fresh, issueId, cycle, applied };
+  } finally {
+    redoInFlight.delete(lockKey);
+  }
+}
+
+async function completeRepick(body) {
+  const issueId = Number(body?.issueId);
+  if (!Number.isInteger(issueId) || issueId < 1) return { error: "Valid issueId required" };
+  if (!sheetEnabled() || !redoBridgeReady) return { error: "REDO bridge is not ready" };
+
+  const issue = db.prepare("SELECT * FROM issues WHERE id = ?").get(issueId);
+  if (!issue) return { error: "Issue not found" };
+  const job = getJob(issue.job_id);
+  if (!job) return { error: "Job not found" };
+  const expected = `REDONE${issue.cycle}`;
+  if (issue.repick_done || norm(job.s3) === expected) {
+    if (!issue.repick_done) db.prepare("UPDATE issues SET repick_done = 1 WHERE id = ?").run(issueId);
+    return { job, issue: { ...issue, repick_done: 1 }, applied: [] };
+  }
+
+  if (!await pushRepickDone(job, issue)) {
+    return { error: "Sheet did not confirm REPICK completion; nothing was changed" };
+  }
+
+  let applied;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare("UPDATE issues SET repick_done = 1 WHERE id = ?").run(issueId);
+    applied = writeJobChanges(job, redoneChanges(issue.cycle), String(body.actor || issue.operator), "redo-complete");
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  const fresh = getJob(job.id);
+  broadcast("job-updated", { jobId: job.id, applied });
+  return { job: fresh, issue: { ...issue, repick_done: 1 }, applied };
+}
+
+function listIssues(ref) {
+  const bizRef = norm(ref);
+  if (!bizRef) return null;
+  return db.prepare(
+    `SELECT i.id, i.job_id, i.biz_ref, i.station, i.operator, i.unit, i.issue,
+            i.material, i.cycle,
+            CASE WHEN i.repick_done = 1 OR UPPER(COALESCE(j.s3, '')) = ('REDONE' || i.cycle)
+                 THEN 1 ELSE 0 END AS repick_done,
+            i.created_at
+     FROM issues i JOIN jobs j ON j.id = i.job_id
+     WHERE UPPER(i.biz_ref) = ? ORDER BY i.id DESC LIMIT 100`
+  ).all(bizRef);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -257,6 +397,10 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p === "/api/stations") {
       return json(res, 200, STATIONS);
+    }
+    if (p === "/api/capabilities") {
+      if (sheetEnabled()) await refreshSheetCapabilities();
+      return json(res, 200, { sheet: sheetEnabled(), redo: redoBridgeReady });
     }
     if (p === "/api/lookup") {
       const ref = url.searchParams.get("ref");
@@ -296,9 +440,21 @@ const server = http.createServer(async (req, res) => {
       ).all(jobId);
       return json(res, 200, rows);
     }
+    if (p === "/api/issues") {
+      const rows = listIssues(url.searchParams.get("ref"));
+      return rows === null ? json(res, 400, { error: "ref required" }) : json(res, 200, rows);
+    }
+    if (p === "/api/redo/complete" && req.method === "POST") {
+      const result = await completeRepick(await readBody(req));
+      return json(res, result.error ? 400 : 200, result);
+    }
+    if (p === "/api/redo" && req.method === "POST") {
+      const result = await submitRedo(await readBody(req));
+      return json(res, result.error ? 400 : 200, result);
+    }
     if (p === "/api/update" && req.method === "POST") {
       const body = await readBody(req);
-      const result = updateStation(body);
+      const result = await updateStation(body);
       return json(res, result.error ? 400 : 200, result);
     }
     if (p === "/api/stream") {
@@ -340,7 +496,9 @@ server.listen(PORT, () => {
   console.log(`Dashboard: http://localhost:${PORT}/dashboard`);
   if (sheetEnabled()) {
     refreshFromSheet();
+    refreshSheetCapabilities();
     setInterval(refreshFromSheet, 10 * 60e3).unref(); // sheet is master; re-pull every 10 min
+    setInterval(refreshSheetCapabilities, 10 * 60e3).unref();
     console.log("Sheet sync: ON (live lookup fallback + 10-min cache refresh + tap writeback)");
   } else {
     console.log("Sheet sync: OFF — set SHEET_WEBAPP_URL and SHEET_TOKEN to enable");

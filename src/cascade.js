@@ -5,16 +5,17 @@
 // Station 1..7 columns; Station 8 uses the existing JOB STATUS column.
 
 const STATIONS = {
-  1: { key: "s1", name: "Planning",          responsible: "Elvis",           buttons: ["DONE", "RC-X", "CHANGES"] },
-  2: { key: "s2", name: "Material control",  responsible: "Joyce",           buttons: ["RECEIVED CL", "W.O.D", "DONE", "CHANGES"] },
-  3: { key: "s3", name: "Material despatch", responsible: "Phoni",           buttons: ["PICK TROLLEY", "SASH PICKED", "PICK SHORT", "SASH SHORT", "DONE"] },
-  4: { key: "s4", name: "Saw 1",             responsible: "Mimmy",           buttons: ["JOB PICKED", "PICK SHORT", "DONE"] },
-  5: { key: "s5", name: "Saw 2",             responsible: "Richard",         buttons: ["JOB PICKED", "PICK SHORT", "DONE"] },
-  6: { key: "s6", name: "Assembly",          responsible: "Portia",          buttons: ["WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "ALL DONE"] },
-  7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", buttons: ["DONE", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
+  1: { key: "s1", name: "Planning",          responsible: "Elvis",           buttons: ["QUEUED", "DONE", "RC-X", "CHANGES", "DONE-NO PW", "REDO"] },
+  2: { key: "s2", name: "Material control",  responsible: "Joyce",           buttons: ["QUEUED", "RECEIVED CL", "DONE", "W.O.D", "ALL DLVD", "MILL PREP", "DONE-NO PW", "CUTPLAN RUN", "0", "REDO"] },
+  3: { key: "s3", name: "Material despatch", responsible: "Phoni",           buttons: ["QUEUED", "DONE", "0", "SCHEDULED", "PICK SHORT", "DEFECT-M", "DONE-NO PW", "ALLOCATED", "SASH PICKED", "SASH SHORT", "REDO"] },
+  4: { key: "s4", name: "Saw 1",             responsible: "Mimmy",           buttons: ["QUEUED", "DONE", "0", "REDO", "JOB PICKED", "PICK SHORT", "DEFECT", "DONE-NO PW", "W.I.P", "CUT-SHORT", "PICK TROLLEY"] },
+  5: { key: "s5", name: "Saw 2",             responsible: "Richard",         buttons: ["QUEUED", "DONE", "0", "REDO", "SCHEDULED", "JOB PICKED", "W.I.P", "DEFECT-M", "DONE-NO PW", "PICK SHORT", "PICK TROLLEY"] },
+  6: { key: "s6", name: "Assembly",          responsible: "Portia",          buttons: ["QUEUED", "ALL DONE", "0", "SCHEDULED", "JOB PICKED", "W.I.P", "DONE-NO PW", "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "REDO"] },
+  7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", buttons: ["QUEUE OUT", "QUEUE IN", "DONE", "REDO", "0", "W.I.P", "ORDER DUE", "DONE-NO PW", "SCHEDULED", "FRAMELESS", "CNC-DG READY", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
   8: { key: "job_status", name: "Bead saw",  responsible: "Kerabo",          buttons: ["DONE", "BEAD SHORT", "NOT PICKED"] },
 };
 
+const REDO_VALUE = "REDO";
 const QUEUE_VALUES = ["", "QUEUED", "QUEUE OUT", "0"];
 const S1_SETTLED = ["DONE", "DONE-NO PW", "RC-X", "CHANGES"];
 
@@ -27,8 +28,8 @@ function applyCascade(job, stationNum, rawValue) {
   const value = norm(rawValue);
   const st = STATIONS[stationNum];
   if (!st) throw new Error("Unknown station " + stationNum);
-  if (stationNum === 8 && !st.buttons.includes(value)) {
-    throw new Error("Invalid Bead Saw status");
+  if (!st.buttons.includes(value)) {
+    throw new Error(stationNum === 8 ? "Invalid Bead Saw status" : `Invalid status for Station ${stationNum}`);
   }
 
   const changes = { [st.key]: value };
@@ -46,6 +47,12 @@ function applyCascade(job, stationNum, rawValue) {
     if (QUEUE_VALUES.includes(s6())) set("s6", "SCHEDULED");
     if (QUEUE_VALUES.includes(s7())) set("s7", "SCHEDULED");
   };
+
+  // REDO is an issue-report workflow, not a production cascade. The server
+  // rejects this sentinel from /api/update and accepts REDO only via /api/redo.
+  if (value === REDO_VALUE && stationNum !== 8) {
+    return { [st.key]: REDO_VALUE, _redo: true };
+  }
 
   // Station 8 has no dedicated sheet column. Its visible DONE choice means
   // "beads complete" in the shared Job Status field, retaining any existing
@@ -128,7 +135,7 @@ function applyCascade(job, stationNum, rawValue) {
   }
 
   if (stationNum === 7) {
-    const glassDone = ["DONE", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"].includes(value);
+    const glassDone = ["DONE", "SLATTED UNITS", "DELIVERED"].includes(value);
 
     if (glassDone) {
       const js = jobStatus();
@@ -161,4 +168,4 @@ function applyCascade(job, stationNum, rawValue) {
   return changes;
 }
 
-module.exports = { STATIONS, applyCascade, norm };
+module.exports = { STATIONS, REDO_VALUE, applyCascade, norm };
