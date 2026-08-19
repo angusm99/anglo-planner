@@ -13,6 +13,9 @@ test("bridge v2 contains the exact nine ISSUE LOG headers and actions", () => {
   }
   assert.match(source, /issue_log/);
   assert.match(source, /repick_done/);
+  assert.match(source, /setup\s*===\s*['"]1['"]/);
+  assert.match(source, /function\s+_setup_\s*\(\)\s*{/);
+  assert.match(source, /var sheet = _issueSheet_\(\);/);
   assert.match(source, /_findIssueRow_/);
   assert.match(source, /planner\.getRange\(plannerRow, COL\.s3\)\.setValue\(repick\)/);
 });

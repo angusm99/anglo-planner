@@ -24,6 +24,7 @@ function doGet(e) {
   try {
     if (!_tokenOk_(e.parameter.token)) return _json_({ ok: false, error: 'bad token' });
     if (e.parameter.capabilities === '1') return _json_({ ok: true, capabilities: CAPABILITIES });
+    if (e.parameter.setup === '1') return _setup_();
 
     var q = _u_(e.parameter.ref);
     var all = e.parameter.all === '1';
@@ -59,6 +60,16 @@ function doGet(e) {
   } catch (err) {
     return _json_({ ok: false, error: String(err) });
   }
+}
+
+function _setup_() {
+  var sheet = _issueSheet_();
+  return _json_({
+    ok: true,
+    issue_log: sheet.getName(),
+    headers: ISSUE_LOG_HEADERS,
+    capabilities: CAPABILITIES,
+  });
 }
 
 function doPost(e) {

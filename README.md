@@ -76,7 +76,7 @@ Tests: `npm test` (46 cascade, QR, Sheet-payload, REDO and bridge-contract check
 
 ## Sheet sync (sheet stays master)
 
-Two-way, via one GAS web app on the sheet (`tools/sheet-writeback.gs`):
+Two-way, via one GAS web app on the sheet (`tools/standalone-tablet-bridge.gs`):
 
 - **Confirmed writeback** — every station tap (plus its cascade) is written to
   the Sheet first. The tablet reports success and updates the local cache only
@@ -94,22 +94,31 @@ SHEET_WEBAPP_URL = <the /exec URL of the deployed web app>
 SHEET_TOKEN      = <shared secret, same as the sheet's PLANNER_TOKEN>
 ```
 
-The currently deployed station bridge can use `tools/sheet-writeback.gs`.
-Deploy the endpoint once: paste it into the sheet's
-Apps Script project and publish it as a Web App (full steps in that file). It
-runs as you, so it can write protected ranges; the planner posts to it with
-Node's built-in `https` — no extra dependency. Column mapping matches
-`tools/export_xlsx.py` (A = task no, O–U = stations 1–7, V = job status).
+The older `tools/sheet-writeback.gs` is retained for reference, but the current
+go-live bridge is `tools/standalone-tablet-bridge.gs` because it also supports
+REDO, `ISSUE LOG`, and numbered `REPICKn` / `REDONEn`. Deploy the endpoint once:
+paste it into the sheet's Apps Script project and publish it as a Web App (full
+steps in that file). It runs as you, so it can write protected ranges; the
+planner posts to it with Node's built-in `https` — no extra dependency. Column
+mapping matches `tools/export_xlsx.py` (A = task no, O–U = stations 1–7, V =
+job status).
 
 Office edits are **not** pushed (office-only jobs have no Sheet row).
 
-### REDO / REPICK workflow (staged, not live yet)
+### REDO / REPICK workflow
 
 `tools/standalone-tablet-bridge.gs` is the reviewed v2 replacement bridge. It
 adds the exact nine-column `ISSUE LOG`, idempotent issue submission, numbered
 `REPICKn` / `REDONEn`, and a named installable `handleIssueLogEdit` trigger. It
 does **not** define another `onEdit`, so it cannot replace or conflict with the
 planner's existing `plannerCore.gs` trigger.
+
+`ISSUE LOG` is initialised automatically: the bridge creates the tab and writes
+the exact nine headers on first REDO transfer if the tab is missing or row 1 is
+empty. For a cleaner go-live first pass, call the deployed web app with
+`?token=<PLANNER_TOKEN>&setup=1`; this checks/creates the headers without adding
+an issue row. If row 1 already contains different headers, it fails loudly with
+`ISSUE LOG headers do not match bridge v2`.
 
 REDO remains visibly locked until the deployed bridge advertises both
 `issue_log` and `repick_done` capabilities. To activate it, replace the
