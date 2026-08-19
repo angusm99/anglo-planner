@@ -7,6 +7,13 @@
 <link rel="icon" href="data:,">
 <script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
 <link rel="stylesheet" href="/styles.css">
+<style>
+button.big.status-selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+</style>
 </head>
 <body>
 <header class="app">
@@ -71,11 +78,11 @@
     <p id="sheetNotice" style="display:none;margin-bottom:12px;font-size:13px;color:var(--bad);"></p>
     <div id="buttons" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"></div>
     <div id="confirmPanel" class="confirm-panel" style="display:none;">
-      <strong id="confirmTitle">Confirm update</strong>
+      <strong id="confirmTitle">Selected status: </strong>
       <p id="confirmText" style="margin-top:6px;color:var(--muted);line-height:1.45;"></p>
       <div class="confirm-actions">
-        <button class="big" id="cancelUpdate" type="button" style="min-height:58px;">Cancel</button>
-        <button class="big" id="confirmUpdate" type="button" style="min-height:58px;border-color:var(--accent);">Confirm &amp; save</button>
+        <button class="big" id="clearSelection" type="button" style="min-height:58px;">Clear selection</button>
+        <button class="big" id="confirmSelection" type="button" style="min-height:58px;border-color:var(--accent);">Confirm selection</button>
       </div>
     </div>
     <p id="cascadeNote" style="margin-top:14px;font-size:14px;color:var(--muted);"></p>
@@ -124,6 +131,7 @@ let job = null;
 let currentRef = "";
 let refQueue = [];
 let pendingValue = "";
+let pendingButton = null;
 let initialQueued = false;
 let advanceTimer = null;
 let redoReady = false;
@@ -306,7 +314,7 @@ function renderButtons() {
     const b = document.createElement("button");
     b.className = "big";
     b.textContent = value;
-    b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value);
+    b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value, b);
     if (value === "REDO") b.style.cssText = "border-color:var(--bad);color:var(--bad);font-weight:700;";
     else b.disabled = !sheetConnected;
     $("buttons").appendChild(b);
@@ -321,24 +329,33 @@ function renderSheetAvailability() {
   if (job) renderButtons();
 }
 
-function askConfirmation(value) {
+function askConfirmation(value, button) {
   pendingValue = value;
-  $("confirmTitle").textContent = `Confirm ${value}`;
-  $("confirmText").textContent = `${operatorName} is setting ${job.biz_ref || job.task_no} at Station ${stationNum} — ${stationCfg.name} to ${value}.`;
+  pendingButton?.classList.remove("status-selected");
+  pendingButton?.setAttribute("aria-pressed", "false");
+  pendingButton = button || null;
+  pendingButton?.classList.add("status-selected");
+  pendingButton?.setAttribute("aria-pressed", "true");
+  const ref = job.biz_ref || job.task_no;
+  $("confirmTitle").textContent = `Selected status: ${value}`;
+  $("confirmText").textContent = `${operatorName} selected ${value} for ${ref}. Tap Confirm selection to save to the Material Planner.`;
   $("confirmPanel").style.display = "block";
   $("confirmPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function cancelConfirmation() {
   pendingValue = "";
+  pendingButton?.classList.remove("status-selected");
+  pendingButton?.setAttribute("aria-pressed", "false");
+  pendingButton = null;
   $("confirmPanel").style.display = "none";
 }
-$("cancelUpdate").onclick = cancelConfirmation;
-$("confirmUpdate").onclick = () => { if (pendingValue) submit(pendingValue); };
+$("clearSelection").onclick = cancelConfirmation;
+$("confirmSelection").onclick = () => { if (pendingValue) submit(pendingValue); };
 
 async function submit(value) {
   if (!sheetConnected) { toast("Sheet bridge is off — update not saved"); return; }
-  $("confirmUpdate").disabled = true;
+  $("confirmSelection").disabled = true;
   let result;
   try {
     const response = await fetch("/api/update", {
@@ -349,7 +366,7 @@ async function submit(value) {
     result = await response.json();
     if (!response.ok && !result.error) result.error = "Update failed";
   } catch (_) { result = { error: "No connection — check WiFi and try again" }; }
-  $("confirmUpdate").disabled = false;
+  $("confirmSelection").disabled = false;
   if (result.error) { toast("Error: " + result.error); return; }
 
   job = result.job;
