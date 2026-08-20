@@ -13,6 +13,18 @@ button.big.status-selected {
   background: var(--accent-dim);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
+/* REDO stays calm at rest so it never reads as "already selected" next to
+   the amber selection highlight; it only asserts itself on hover/press. */
+button.big.redo-btn {
+  border-color: rgba(255,122,114,0.4);
+  color: var(--fg);
+  font-weight: 600;
+}
+button.big.redo-btn:hover,
+button.big.redo-btn:active {
+  border-color: var(--bad);
+  color: var(--bad);
+}
 .aux-actions {
   display: flex;
   gap: 10px;
@@ -389,7 +401,7 @@ function renderButtons() {
     b.className = "big";
     b.textContent = value;
     b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value, b);
-    if (value === "REDO") b.style.cssText = "border-color:var(--bad);color:var(--bad);font-weight:700;";
+    if (value === "REDO") b.classList.add("redo-btn");
     else {
       b.disabled = !sheetConnected;
       b.title = sheetConnected ? "" : PREVIEW_MESSAGE;
@@ -410,6 +422,11 @@ function renderSheetAvailability() {
 }
 
 function askConfirmation(value, button) {
+  // A previous confirm may still have an auto-advance timer ticking down;
+  // making a new selection means the operator wants to stay on this job,
+  // so cancel it — otherwise it can fire mid-selection and yank the screen
+  // away before Confirm is tapped, leaving no visible confirm panel.
+  clearTimeout(advanceTimer);
   showUpdateError("");
   pendingValue = value;
   pendingButton?.classList.remove("status-selected");
@@ -522,6 +539,7 @@ function renderRedoAvailability() {
 }
 
 function showRedoForm() {
+  clearTimeout(advanceTimer);
   cancelConfirmation();
   if (refQueue.length) {
     refQueue = [];
