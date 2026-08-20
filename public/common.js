@@ -69,3 +69,56 @@ function startClock(el) {
   tick();
   setInterval(tick, 30000);
 }
+
+let terminalWakeLock = null;
+
+async function keepTerminalAwake() {
+  if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+  try {
+    terminalWakeLock = await navigator.wakeLock.request("screen");
+    terminalWakeLock.addEventListener("release", () => { terminalWakeLock = null; });
+  } catch (_) {
+    terminalWakeLock = null;
+  }
+}
+
+function isTerminalFullscreen() {
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function syncTerminalModeButton(btn) {
+  if (!btn) return;
+  const active = isTerminalFullscreen();
+  btn.textContent = active ? "EXIT FULLSCREEN" : "LOCK FULLSCREEN";
+  btn.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
+async function toggleTerminalMode(btn) {
+  try {
+    if (isTerminalFullscreen()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) await exit.call(document);
+    } else {
+      const root = document.documentElement;
+      const enter = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (!enter) throw new Error("Fullscreen is not supported by this browser.");
+      await enter.call(root, { navigationUI: "hide" });
+      await keepTerminalAwake();
+    }
+  } catch (err) {
+    const message = document.getElementById("terminalModeMessage");
+    if (message) message.textContent = err && err.message ? err.message : "Could not enter fullscreen.";
+  }
+  syncTerminalModeButton(btn);
+}
+
+function bindTerminalModeButton(btn) {
+  if (!btn) return;
+  syncTerminalModeButton(btn);
+  btn.addEventListener("click", () => toggleTerminalMode(btn));
+  document.addEventListener("fullscreenchange", () => syncTerminalModeButton(btn));
+  document.addEventListener("webkitfullscreenchange", () => syncTerminalModeButton(btn));
+  document.addEventListener("visibilitychange", () => {
+    if (isTerminalFullscreen()) keepTerminalAwake();
+  });
+}

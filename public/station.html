@@ -35,6 +35,11 @@ button.big.redo-btn:active {
   min-height: 42px;
   font-size: 14px;
 }
+.terminal-mode-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
 </style>
 </head>
 <body>
@@ -46,11 +51,13 @@ button.big.redo-btn:active {
   <div class="right">
     <button class="theme" onclick="location.href='/'">← Home</button>
     <button class="theme" id="changeOperator" style="display:none;">Change Operator</button>
+    <button class="theme terminal-mode-btn" id="terminalModeBtn" type="button">Lock Fullscreen</button>
     <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
     <div class="clock" id="clock"></div>
   </div>
 </header>
 <main>
+  <p id="terminalModeMessage" style="min-height:0;margin:0;color:var(--bad);font-size:12px;" aria-live="polite"></p>
   <section id="operatorView" class="card">
     <div class="aux-actions">
       <button class="theme" onclick="location.href='/'">← Home</button>
@@ -195,6 +202,7 @@ const stationNum = Number(location.pathname.split("/")[2]);
 const params = new URLSearchParams(location.search);
 const initialRef = String(params.get("ref") || "").trim().toUpperCase();
 const $ = (id) => document.getElementById(id);
+bindTerminalModeButton($("terminalModeBtn"));
 
 let stationCfg = null;
 let operatorName = "";

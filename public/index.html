@@ -26,6 +26,9 @@
   .operator { display:block; margin-top:7px; font-size:clamp(8px,2.05vw,10px); line-height:1.25; letter-spacing:.05em; color:var(--muted); text-transform:uppercase; }
   .station:active .station-no,.station:active .operator { color:#0a0906; }
   .qr-button { width:100%; min-height:62px; margin-top:11px; cursor:pointer; color:#0a0906; background:linear-gradient(135deg,var(--gold),var(--deep)); border:0; border-radius:8px; font-size:13px; font-weight:900; letter-spacing:.06em; }
+  .terminal-mode { width:100%; min-height:52px; margin-top:9px; cursor:pointer; color:var(--gold); background:rgba(246,201,69,.035); border:1.5px solid rgba(246,201,69,.72); border-radius:8px; font-size:12px; font-weight:900; letter-spacing:.08em; }
+  .terminal-mode:active,.terminal-mode[aria-pressed="true"] { background:var(--gold); color:#0a0906; }
+  .terminal-mode-note { min-height:16px; margin-top:6px; text-align:center; color:#ff7a72; font-size:10px; }
   footer { text-align:center; margin-top:16px; color:#766d4f; font-size:9px; letter-spacing:.1em; text-transform:uppercase; }
   .modal { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.84); }
   .modal.open { display:flex; }
@@ -50,6 +53,8 @@
   </div>
   <div class="menu" id="stations"></div>
   <button class="qr-button" id="openQr" type="button">▣ &nbsp; SCAN COVER-SHEET QR CODE</button>
+  <button class="terminal-mode" id="terminalModeBtn" type="button">LOCK FULLSCREEN</button>
+  <div class="terminal-mode-note" id="terminalModeMessage" aria-live="polite"></div>
   <footer>Select your station to begin · Cape Town manufacturing</footer>
 </main>
 
@@ -69,6 +74,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 startClock($("clock"));
+bindTerminalModeButton($("terminalModeBtn"));
 fetch("/api/stations").then(r => r.json()).then(stations => {
   $("sys").textContent = "ONLINE";
   for (const [num, st] of Object.entries(stations)) {
