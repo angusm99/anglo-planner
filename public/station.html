@@ -119,6 +119,9 @@ button.big.redo-btn:active {
   </section>
 
   <section id="redoView" class="card" style="display:none;">
+    <div class="aux-actions">
+      <button class="theme" id="redoBack" type="button">← Back</button>
+    </div>
     <h2 style="font-size:19px;color:var(--bad);">REDO — Issue Report</h2>
     <p style="color:var(--muted);font-size:14px;margin-top:6px;">Log the issue, set this station to REDO, and notify Material Despatch with a numbered REPICK.</p>
     <p id="redoAvailability" style="font-size:13px;margin-top:9px;color:var(--bad);"></p>
@@ -514,6 +517,9 @@ function renderCurrent() {
 }
 
 function renderButtons() {
+  // Picking a status only stages it locally — it never touches the Sheet by
+  // itself, so these buttons stay clickable even when the bridge is off.
+  // Only Confirm All (the actual write) is gated on sheetConnected.
   $("buttons").innerHTML = "";
   for (const value of stationCfg.buttons) {
     const b = document.createElement("button");
@@ -521,10 +527,6 @@ function renderButtons() {
     b.textContent = value;
     b.onclick = () => value === "REDO" ? showRedoForm() : askConfirmation(value, b);
     if (value === "REDO") b.classList.add("redo-btn");
-    else {
-      b.disabled = !sheetConnected;
-      b.title = sheetConnected ? "" : PREVIEW_MESSAGE;
-    }
     $("buttons").appendChild(b);
   }
 }
@@ -612,10 +614,12 @@ function showRedoForm() {
   $("redoUnit").focus();
 }
 
-$("redoCancel").onclick = () => {
+function redoBackToJob() {
   $("redoView").style.display = "none";
   $("jobView").style.display = "block";
-};
+}
+$("redoCancel").onclick = redoBackToJob;
+$("redoBack").onclick = redoBackToJob;
 
 $("redoIssueSelect").onchange = () => {
   const isOther = $("redoIssueSelect").value === "OTHER";
