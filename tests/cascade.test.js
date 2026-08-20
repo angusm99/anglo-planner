@@ -101,10 +101,17 @@ test("S7 completion statuses still trigger the glass cascade", () => {
   }
 });
 
-test("S8 exposes exactly the approved Bead Saw choices", () => {
-  assert.deepStrictEqual(STATIONS[8].buttons, ["DONE", "BEAD SHORT", "NOT PICKED"]);
+test("S8 exposes exactly the approved Bead Saw choices, including REDO", () => {
+  assert.deepStrictEqual(STATIONS[8].buttons, ["DONE", "BEAD SHORT", "NOT PICKED", "REDO"]);
   assert.strictEqual(STATIONS[8].key, "job_status");
   assert.strictEqual(STATIONS[8].responsible, "Kerabo");
+});
+
+test("S8 REDO is flagged and never touches Job Status, same as every other station", () => {
+  assert.deepStrictEqual(applyCascade(blank, 8, "REDO"), { job_status: "REDO", _redo: true });
+  // A combined value already sitting in Job Status must survive the rejection.
+  const job = { ...blank, job_status: "FRAMES+BEADS" };
+  assert.deepStrictEqual(applyCascade(job, 8, "REDO"), { job_status: "REDO", _redo: true });
 });
 
 test("S8 DONE writes only the Job Status field as beads complete", () => {
@@ -150,8 +157,8 @@ test("Stations 1 to 7 expose the approved revised status lists", () => {
   for (let station = 1; station <= 7; station++) assert.deepStrictEqual(STATIONS[station].buttons, expected[station]);
 });
 
-test("REDO on Stations 1 to 7 is flagged and never cascades", () => {
-  for (let station = 1; station <= 7; station++) {
+test("REDO on every station (1 to 8) is flagged and never cascades", () => {
+  for (let station = 1; station <= 8; station++) {
     assert.deepStrictEqual(applyCascade(blank, station, "REDO"), {
       [STATIONS[station].key]: "REDO", _redo: true,
     });

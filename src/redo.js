@@ -8,8 +8,8 @@ function text(value, max) {
 
 function cleanRedoInput(body) {
   const station = Number(body?.station);
-  if (!Number.isInteger(station) || station < 1 || station > 7) {
-    throw new Error("REDO is available only for Stations 1 to 7");
+  if (!Number.isInteger(station) || station < 1 || station > 8) {
+    throw new Error("REDO is available only for Stations 1 to 8");
   }
   const jobId = Number(body?.jobId);
   if (!Number.isInteger(jobId) || jobId < 1) throw new Error("Valid jobId required");
@@ -31,9 +31,13 @@ function cycleLabel(prefix, cycle) {
 
 function redoChanges(station, cycle) {
   const st = STATIONS[station];
-  if (!st || station === 8) throw new Error("Invalid REDO station");
+  if (!st) throw new Error("Invalid REDO station");
   const repick = cycleLabel("REPICK", cycle);
-  return station === 3 ? { s3: repick } : { [st.key]: "REDO", s3: repick };
+  // Stations 3 and 8 have no field of their own to mark "REDO" on (station 3
+  // *is* the s3/REPICK target; station 8's key is the shared job_status
+  // column, which REDO must never touch — see cascade.js). Both just notify
+  // Despatch with the numbered REPICK.
+  return (station === 3 || station === 8) ? { s3: repick } : { [st.key]: "REDO", s3: repick };
 }
 
 function redoneChanges(cycle) {

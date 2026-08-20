@@ -73,7 +73,6 @@ button.big.redo-btn:active {
   <section id="scanView" class="card" style="display:none;">
     <div class="aux-actions">
       <button class="theme" id="operatorBack" type="button">← Operator</button>
-      <button class="theme" id="continueQueue" type="button" style="display:none;">Continue queue</button>
     </div>
     <h2 style="font-size:17px;margin-bottom:6px;">Scan the job cover, or type the ref</h2>
     <p style="color:var(--muted);font-size:14px;margin-bottom:14px;">Enter one or several Biz Refs/task numbers. Separate them with spaces, commas, semicolons or new lines.</p>
@@ -82,14 +81,16 @@ button.big.redo-btn:active {
       <button class="big" type="submit">Go</button>
     </form>
     <div class="queue-status" id="queueStatus"></div>
-    <div id="matches" style="margin-top:8px;display:grid;gap:10px;"></div>
+    <p id="listSheetNotice" style="display:none;margin-top:10px;font-size:13px;"></p>
+    <div id="jobList" style="margin-top:8px;display:grid;gap:10px;"></div>
+    <button class="big" id="confirmAllBtn" type="button" style="width:100%;min-height:58px;margin-top:14px;display:none;border-color:var(--accent);font-weight:700;">Confirm All</button>
   </section>
 
   <section id="jobView" class="card" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
       <div>
         <div class="aux-actions" style="margin-bottom:10px;">
-          <button class="theme" id="refsBack" type="button">← Refs</button>
+          <button class="theme" id="refsBack" type="button">← Job list</button>
         </div>
         <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
           <span id="jobRef" style="font-size:34px;font-weight:700;"></span>
@@ -98,7 +99,6 @@ button.big.redo-btn:active {
         <div id="jobMeta" style="margin-top:6px;color:var(--muted);font-size:15px;"></div>
         <div id="jobChips" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
-      <button class="big" id="backBtn" type="button" style="min-height:52px;font-size:15px;">Next job ⟶</button>
     </div>
     <div class="queue-status" id="jobQueueStatus"></div>
     <div style="margin:14px 0 10px;display:flex;align-items:center;gap:10px;">
@@ -193,16 +193,18 @@ const $ = (id) => document.getElementById(id);
 let stationCfg = null;
 let operatorName = "";
 let operatorType = "";
-let job = null;
-let currentRef = "";
-let refQueue = [];
+// Each entry: { ref, job, matches, error, pendingValue, status, saveError }
+// status: loading | error | ambiguous | staged | skipped | saving | saved | save-error
+let queueJobs = [];
+let activeIndex = -1; // index into queueJobs open in the per-job detail view, -1 = on the list
 let pendingValue = "";
 let pendingButton = null;
 let initialQueued = false;
-let advanceTimer = null;
 let redoReady = false;
 let sheetConnected = false;
 const PREVIEW_MESSAGE = "Preview only — status buttons are disabled because this server has no live Sheet bridge. Start the Windows server with SHEET_WEBAPP_URL and SHEET_TOKEN in the same PowerShell window.";
+
+function activeEntry() { return activeIndex >= 0 ? queueJobs[activeIndex] : null; }
 
 startClock($("clock"));
 $("themeBtn").textContent = themeButtonLabel();
@@ -251,17 +253,13 @@ function confirmOperator(name, type) {
   $("stWho").textContent = `Operator: ${clean}`;
   $("changeOperator").style.display = "inline-block";
   $("operatorView").style.display = "none";
-  if (job) {
-    $("jobView").style.display = "block";
-    return;
-  }
   $("scanView").style.display = "block";
+  renderQueueList();
   if (initialRef && !initialQueued) {
-    refQueue.push(initialRef);
     initialQueued = true;
+    lookupRefs([initialRef]);
   }
-  if (!currentRef && refQueue.length) processNextRef();
-  else { renderQueue(); $("refInput").focus(); }
+  $("refInput").focus();
 }
 
 $("primaryOperator").onclick = () => confirmOperator(stationCfg.responsible, "primary");
@@ -272,9 +270,8 @@ $("guestOperator").onclick = () => {
 $("confirmGuest").onclick = () => confirmOperator($("guestName").value, "guest");
 $("guestName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("confirmGuest").click(); } });
 $("changeOperator").onclick = () => {
-  clearTimeout(advanceTimer);
-  resetJobState();
-  refQueue = [];
+  queueJobs = [];
+  activeIndex = -1;
   cancelConfirmation();
   operatorName = "";
   operatorType = "";
@@ -288,9 +285,8 @@ $("changeOperator").onclick = () => {
 };
 
 $("operatorBack").onclick = () => {
-  clearTimeout(advanceTimer);
-  resetJobState();
-  refQueue = [];
+  queueJobs = [];
+  activeIndex = -1;
   cancelConfirmation();
   $("scanView").style.display = "none";
   $("jobView").style.display = "none";
@@ -307,88 +303,211 @@ $("refForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const refs = splitRefs($("refInput").value);
   if (!refs.length) return;
-  refQueue.push(...refs);
   $("refInput").value = "";
-  renderQueue();
-  if (!currentRef && !job) processNextRef();
+  lookupRefs(refs);
 });
 
-$("continueQueue").onclick = () => {
-  if (!currentRef && !job && refQueue.length) processNextRef();
+// Looks up each ref and adds it to the job list already staged at the
+// station's default completion status, so an operator who typed in several
+// correct refs can just tap Confirm All instead of re-picking every one.
+async function lookupRefs(refs) {
+  const start = queueJobs.length;
+  for (const ref of refs) queueJobs.push({ ref, job: null, matches: null, error: null, pendingValue: null, status: "loading" });
+  renderQueueList();
+  for (let i = start; i < queueJobs.length; i++) {
+    const entry = queueJobs[i];
+    try {
+      const response = await fetch(`/api/lookup?ref=${encodeURIComponent(entry.ref)}`);
+      const matches = await response.json();
+      if (!response.ok) throw new Error(matches.error || "Lookup failed");
+      if (!matches.length) {
+        entry.status = "error";
+        entry.error = `No job found for ${entry.ref}`;
+      } else if (matches.length === 1) {
+        entry.job = matches[0];
+        entry.pendingValue = stationCfg.defaultStatus;
+        entry.status = "staged";
+      } else {
+        entry.matches = matches;
+        entry.status = "ambiguous";
+      }
+    } catch (err) {
+      entry.status = "error";
+      entry.error = `${entry.ref}: ${err.message || "No connection"}`;
+    }
+    renderQueueList();
+  }
+}
+
+function resolveAmbiguous(i, match) {
+  const entry = queueJobs[i];
+  entry.job = match;
+  entry.matches = null;
+  entry.pendingValue = stationCfg.defaultStatus;
+  entry.status = "staged";
+  renderQueueList();
+}
+
+function renderQueueList() {
+  const wrap = $("jobList");
+  wrap.innerHTML = "";
+  queueJobs.forEach((entry, i) => {
+    const row = document.createElement("div");
+    row.style.cssText = "border:1px solid var(--border);border-radius:10px;padding:14px 16px;";
+    const refLabel = entry.job ? (entry.job.biz_ref || entry.job.task_no) : entry.ref;
+    const customer = entry.job ? esc(entry.job.customer || "") : "";
+    let body = `<div><strong style="font-size:18px;">${esc(refLabel)}</strong>${customer ? ` <span style="color:var(--muted);font-size:14px;">${customer}</span>` : ""}</div>`;
+
+    if (entry.status === "loading") {
+      body += `<div style="margin-top:8px;color:var(--muted);font-size:14px;">Looking up…</div>`;
+    } else if (entry.status === "error") {
+      body += `<div style="margin-top:8px;color:var(--bad);font-size:14px;">${esc(entry.error)}</div>`;
+    } else if (entry.status === "ambiguous") {
+      body += `<div style="margin-top:8px;color:var(--muted);font-size:14px;">${entry.matches.length} matches — choose one:</div>
+        <div style="margin-top:8px;display:grid;gap:8px;" data-pick="${i}"></div>`;
+    } else {
+      const currentRaw = entry.job[stationCfg.key];
+      const currentDisplay = currentRaw && String(currentRaw).trim() !== "0" ? currentRaw : "—";
+      body += `<div style="margin-top:6px;color:var(--muted);font-size:13px;">Install ${fmtDate(entry.job.install_date)} · Now: <span class="pill ${classify(currentRaw)}" style="font-size:11px;padding:2px 8px;">${esc(currentDisplay)}</span></div>`;
+
+      if (entry.status === "staged") {
+        body += `<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="pill" style="background:var(--accent-dim);color:var(--fg);border:1px solid var(--accent);">Will save: ${esc(entry.pendingValue)}</span>
+          <button class="theme" data-action="change" data-i="${i}" type="button">Change</button>
+          <button class="theme" data-action="clear" data-i="${i}" type="button">Clear</button>
+        </div>`;
+      } else if (entry.status === "skipped") {
+        body += `<div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+          <span style="color:var(--muted);font-size:13px;">Not selected</span>
+          <button class="big" data-action="select" data-i="${i}" type="button" style="min-height:44px;padding:8px 18px;">Select status</button>
+        </div>`;
+      } else if (entry.status === "saving") {
+        body += `<div style="margin-top:10px;color:var(--muted);font-size:14px;">Saving…</div>`;
+      } else if (entry.status === "saved") {
+        body += `<div style="margin-top:10px;color:var(--done);font-weight:600;">Saved ✓ ${esc(entry.pendingValue)}</div>`;
+      } else if (entry.status === "save-error") {
+        body += `<div style="margin-top:10px;color:var(--bad);font-size:14px;">Not saved: ${esc(entry.saveError)}</div>
+          <div style="margin-top:8px;display:flex;gap:10px;">
+            <button class="theme" data-action="change" data-i="${i}" type="button">Change status</button>
+            <button class="big" data-action="retry" data-i="${i}" type="button" style="min-height:44px;padding:8px 18px;">Retry</button>
+          </div>`;
+      }
+    }
+    row.innerHTML = body;
+    wrap.appendChild(row);
+
+    if (entry.status === "ambiguous") {
+      const pickWrap = row.querySelector(`[data-pick="${i}"]`);
+      for (const match of entry.matches) {
+        const b = document.createElement("button");
+        b.className = "theme";
+        b.style.cssText = "text-align:left;padding:10px 12px;";
+        b.innerHTML = `${esc(match.biz_ref)} — ${esc(match.customer)}<br><span style="font-size:12px;color:var(--muted)">Install ${fmtDate(match.install_date)} · ${esc(match.source_tab)}</span>`;
+        b.onclick = () => resolveAmbiguous(i, match);
+        pickWrap.appendChild(b);
+      }
+    }
+  });
+
+  wrap.querySelectorAll("[data-action]").forEach((btn) => {
+    const i = Number(btn.dataset.i);
+    const action = btn.dataset.action;
+    btn.onclick = () => {
+      if (action === "change" || action === "select") openDetail(i);
+      else if (action === "clear") { queueJobs[i].status = "skipped"; queueJobs[i].pendingValue = null; renderQueueList(); }
+      else if (action === "retry") saveEntry(queueJobs[i]);
+    };
+  });
+
+  const actionable = queueJobs.filter((e) => e.status === "staged" || e.status === "save-error").length;
+  $("confirmAllBtn").style.display = queueJobs.length ? "block" : "none";
+  $("confirmAllBtn").textContent = actionable ? `Confirm All (${actionable})` : "Confirm All";
+  $("confirmAllBtn").disabled = actionable === 0 || !sheetConnected;
+
+  $("queueStatus").textContent = queueJobs.length
+    ? `${queueJobs.length} job${queueJobs.length === 1 ? "" : "s"} in list`
+    : "Ready for references";
+
+  const notice = $("listSheetNotice");
+  if (queueJobs.length) {
+    notice.style.display = "block";
+    notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
+    notice.textContent = sheetConnected
+      ? "Live Google Sheet connected — Confirm All saves every staged job below."
+      : PREVIEW_MESSAGE;
+  } else {
+    notice.style.display = "none";
+  }
+}
+
+async function saveEntry(entry) {
+  entry.status = "saving";
+  renderQueueList();
+  try {
+    const response = await fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: entry.job.id, station: stationNum, value: entry.pendingValue, actor: operatorName, source: `station-${stationNum}` }),
+    });
+    const result = await response.json();
+    if (!response.ok && !result.error) result.error = "Update failed";
+    if (result.error) {
+      entry.status = "save-error";
+      entry.saveError = result.error;
+    } else {
+      entry.job = result.job;
+      entry.status = "saved";
+    }
+  } catch (err) {
+    entry.status = "save-error";
+    entry.saveError = err.message || "No connection";
+  }
+  renderQueueList();
+}
+
+$("confirmAllBtn").onclick = async () => {
+  const targets = queueJobs.filter((e) => e.status === "staged" || e.status === "save-error");
+  if (!targets.length) return;
+  for (const entry of targets) await saveEntry(entry);
+  const savedCount = targets.filter((e) => e.status === "saved").length;
+  toast(savedCount === targets.length ? `Saved ${savedCount} ✓` : `Saved ${savedCount} of ${targets.length} — check errors below`);
 };
 
-async function processNextRef() {
-  job = null;
+function backToList() {
+  activeIndex = -1;
   $("jobView").style.display = "none";
+  $("redoView").style.display = "none";
   $("scanView").style.display = "block";
-  $("matches").innerHTML = "";
-  if (!refQueue.length) {
-    currentRef = "";
-    renderQueue();
-    $("refInput").focus();
-    return;
-  }
-  currentRef = refQueue.shift();
-  renderQueue(`Looking up ${currentRef}…`);
-  let matches;
-  try {
-    const response = await fetch(`/api/lookup?ref=${encodeURIComponent(currentRef)}`);
-    matches = await response.json();
-    if (!response.ok) throw new Error(matches.error || "Lookup failed");
-  } catch (err) {
-    showLookupFailure(`${currentRef}: ${err.message || "No connection"}`);
-    return;
-  }
-  if (!matches.length) {
-    showLookupFailure(`No job found for ${currentRef}`);
-  } else if (matches.length === 1) {
-    showJob(matches[0]);
-  } else {
-    renderQueue(`${currentRef} has ${matches.length} matches · ${refQueue.length} remaining`);
-    for (const match of matches) {
-      const b = document.createElement("button");
-      b.className = "big";
-      b.style.textAlign = "left";
-      b.innerHTML = `${esc(match.biz_ref)} — ${esc(match.customer)}<br><span style="font-size:13px;font-weight:400;color:var(--muted)">Install ${fmtDate(match.install_date)} · ${esc(match.source_tab)}</span>`;
-      b.onclick = () => showJob(match);
-      $("matches").appendChild(b);
-    }
-  }
+  renderQueueList();
 }
+$("refsBack").onclick = backToList;
 
-function showLookupFailure(message) {
-  renderQueue(`${message} · ${refQueue.length} still queued`);
-  const box = document.createElement("div");
-  box.className = "confirm-panel";
-  box.innerHTML = `<strong>${esc(message)}</strong><p style="margin-top:6px;color:var(--muted)">The remaining references have been kept.</p>`;
-  const next = document.createElement("button");
-  next.className = "big";
-  next.style.cssText = "width:100%;min-height:56px;margin-top:10px";
-  next.textContent = refQueue.length ? "Continue to next ref ⟶" : "Enter another ref";
-  next.onclick = () => { currentRef = ""; processNextRef(); };
-  box.appendChild(next);
-  $("matches").appendChild(box);
-}
-
-function showJob(value) {
-  job = value;
+function openDetail(i) {
+  activeIndex = i;
+  const entry = queueJobs[i];
+  const j = entry.job;
   $("scanView").style.display = "none";
   $("jobView").style.display = "block";
   $("redoView").style.display = "none";
-  $("jobRef").textContent = value.biz_ref || value.task_no;
-  $("jobCustomer").textContent = value.customer;
-  $("jobMeta").textContent = `Install ${fmtDate(value.install_date)} · ${value.colour || "no colour"} · task ${value.task_no || "—"}` + (value.glasslist ? " · glasslist" : "");
-  $("jobChips").innerHTML = qtyChips(value).map(c => `<span class="pill queue">${esc(c)}</span>`).join("");
-  $("jobQueueStatus").textContent = `Processing ${currentRef || value.biz_ref} · ${refQueue.length} remaining`;
+  $("jobRef").textContent = j.biz_ref || j.task_no;
+  $("jobCustomer").textContent = j.customer;
+  $("jobMeta").textContent = `Install ${fmtDate(j.install_date)} · ${j.colour || "no colour"} · task ${j.task_no || "—"}` + (j.glasslist ? " · glasslist" : "");
+  $("jobChips").innerHTML = qtyChips(j).map((c) => `<span class="pill queue">${esc(c)}</span>`).join("");
+  $("jobQueueStatus").textContent = `Job ${i + 1} of ${queueJobs.length}`;
   renderCurrent();
   renderButtons();
-  cancelConfirmation();
-  $("cascadeNote").textContent = "";
   showUpdateError("");
+  $("cascadeNote").textContent = "";
+  if (entry.status === "staged" && entry.pendingValue) {
+    const match = [...$("buttons").children].find((b) => b.textContent === entry.pendingValue);
+    askConfirmation(entry.pendingValue, match || null);
+  } else {
+    cancelConfirmation();
+  }
 }
 
 function renderCurrent() {
-  const raw = job?.[stationCfg.key];
+  const raw = activeEntry()?.job?.[stationCfg.key];
   const display = raw && String(raw).trim() !== "0" ? raw : "—";
   $("currentVal").textContent = display;
   $("currentVal").className = "pill " + classify(raw);
@@ -412,21 +531,20 @@ function renderButtons() {
 
 function renderSheetAvailability() {
   const notice = $("sheetNotice");
-  if (!notice) return;
-  notice.style.display = "block";
-  notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
-  notice.textContent = sheetConnected
-    ? "Live Google Sheet connected — confirmed status updates will save to the Material Planner."
-    : PREVIEW_MESSAGE;
-  if (job) renderButtons();
+  if (notice) {
+    notice.style.display = "block";
+    notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
+    notice.textContent = sheetConnected
+      ? "Live Google Sheet connected — Confirm All (on the job list) saves this job."
+      : PREVIEW_MESSAGE;
+  }
+  renderQueueList();
+  if (activeIndex >= 0) renderButtons();
 }
 
+// Picking a status stages it on that job's list row — it does not save.
+// Nothing reaches the Sheet until Confirm All is tapped on the job list.
 function askConfirmation(value, button) {
-  // A previous confirm may still have an auto-advance timer ticking down;
-  // making a new selection means the operator wants to stay on this job,
-  // so cancel it — otherwise it can fire mid-selection and yank the screen
-  // away before Confirm is tapped, leaving no visible confirm panel.
-  clearTimeout(advanceTimer);
   showUpdateError("");
   pendingValue = value;
   pendingButton?.classList.remove("status-selected");
@@ -434,9 +552,10 @@ function askConfirmation(value, button) {
   pendingButton = button || null;
   pendingButton?.classList.add("status-selected");
   pendingButton?.setAttribute("aria-pressed", "true");
-  const ref = job.biz_ref || job.task_no;
+  const entry = activeEntry();
+  const ref = entry.job.biz_ref || entry.job.task_no;
   $("confirmTitle").textContent = `Selected status: ${value}`;
-  $("confirmText").textContent = `${operatorName} selected ${value} for ${ref}. Tap Confirm selection to save to the Material Planner.`;
+  $("confirmText").textContent = `${operatorName} selected ${value} for ${ref}. Tap Confirm to stage it — tap Confirm All on the job list to actually save.`;
   $("confirmPanel").style.display = "block";
   $("confirmPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -448,86 +567,20 @@ function cancelConfirmation() {
   pendingButton = null;
   $("confirmPanel").style.display = "none";
 }
-$("clearSelection").onclick = cancelConfirmation;
-$("confirmSelection").onclick = () => { if (pendingValue) submit(pendingValue); };
-
-async function submit(value) {
-  showUpdateError("");
-  if (!sheetConnected) {
-    const message = "Sheet bridge is off — update not saved";
-    showUpdateError(message);
-    toast(message);
-    return;
-  }
-  $("confirmSelection").disabled = true;
-  let result;
-  try {
-    const response = await fetch("/api/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId: job.id, station: stationNum, value, actor: operatorName, source: `station-${stationNum}` }),
-    });
-    result = await response.json();
-    if (!response.ok && !result.error) result.error = "Update failed";
-  } catch (_) { result = { error: "No connection — check WiFi and try again" }; }
-  $("confirmSelection").disabled = false;
-  if (result.error) {
-    showUpdateError(`Update not saved: ${result.error}`);
-    toast("Error: " + result.error);
-    return;
-  }
-
-  job = result.job;
-  renderCurrent();
+$("clearSelection").onclick = () => {
+  const entry = activeEntry();
+  if (entry) { entry.status = "skipped"; entry.pendingValue = null; }
   cancelConfirmation();
-  const others = result.applied.filter(change => change.field !== stationCfg.key);
-  const names = { s1:"Planning",s2:"Material control",s3:"Despatch",s4:"Saw 1",s5:"Saw 2",s6:"Assembly",s7:"Glass",job_status:"Job status" };
-  $("cascadeNote").textContent = others.length ? "Also updated: " + others.map(c => `${names[c.field]} → ${c.to}`).join(", ") : "";
-  toast(`Saved ✓ ${value} · ${operatorName}`);
-  clearTimeout(advanceTimer);
-  if (refQueue.length) {
-    $("jobQueueStatus").textContent = `${refQueue.length} remaining — loading next job…`;
-    advanceTimer = setTimeout(nextJob, 1200);
-  } else {
-    $("jobQueueStatus").textContent = "No more queued references.";
-    advanceTimer = setTimeout(nextJob, 2400);
-  }
-}
-
-function nextJob() {
-  clearTimeout(advanceTimer);
-  cancelConfirmation();
-  resetJobState();
-  $("redoView").style.display = "none";
-  processNextRef();
-}
-$("backBtn").onclick = nextJob;
-
-$("refsBack").onclick = () => {
-  clearTimeout(advanceTimer);
-  const ref = currentRef || job?.biz_ref || job?.task_no || "";
-  if (ref) refQueue.unshift(String(ref).toUpperCase());
-  resetJobState();
-  cancelConfirmation();
-  $("jobView").style.display = "none";
-  $("redoView").style.display = "none";
-  $("scanView").style.display = "block";
-  $("matches").innerHTML = "";
-  renderQueue();
-  $("refInput").focus();
+  backToList();
 };
-
-function resetJobState() {
-  job = null;
-  currentRef = "";
-  showUpdateError("");
-}
-
-function renderQueue(message) {
-  const text = message || (currentRef ? `Processing ${currentRef} · ${refQueue.length} remaining` : refQueue.length ? `${refQueue.length} references queued` : "Ready for references");
-  $("queueStatus").textContent = text;
-  $("continueQueue").style.display = (!currentRef && !job && refQueue.length) ? "inline-block" : "none";
-}
+$("confirmSelection").onclick = () => {
+  const entry = activeEntry();
+  if (!entry || !pendingValue) return;
+  entry.pendingValue = pendingValue;
+  entry.status = "staged";
+  cancelConfirmation();
+  backToList();
+};
 
 function renderRedoAvailability() {
   if (!$("redoAvailability")) return;
@@ -539,18 +592,11 @@ function renderRedoAvailability() {
 }
 
 function showRedoForm() {
-  clearTimeout(advanceTimer);
   cancelConfirmation();
-  if (refQueue.length) {
-    refQueue = [];
-    $("redoQueueNotice").style.display = "block";
-    $("redoQueueNotice").textContent = "REDO is single-reference. Remaining queued refs have been cleared.";
-  } else {
-    $("redoQueueNotice").style.display = "none";
-    $("redoQueueNotice").textContent = "";
-  }
+  const entry = activeEntry();
+  $("redoQueueNotice").style.display = "none";
   $("redoDate").textContent = new Date().toLocaleDateString("en-ZA");
-  $("redoRef").textContent = job.biz_ref || job.task_no;
+  $("redoRef").textContent = entry.job.biz_ref || entry.job.task_no;
   $("redoStation").textContent = `Station ${stationNum} — ${stationCfg.name}`;
   $("redoOperator").textContent = operatorName;
   $("redoUnit").value = "";
@@ -597,13 +643,14 @@ $("redoSubmit").onclick = async () => {
   if (issueChoice === "OTHER" && !issueOther) { toast("Enter Other Issue Details"); $("redoIssueOther").focus(); return; }
   if (materialChoice === "OTHER" && !materialOther) { toast("Enter Other / Additional Material"); $("redoMaterialOther").focus(); return; }
 
+  const entry = activeEntry();
   $("redoSubmit").disabled = true;
   let result;
   try {
     const response = await fetch("/api/redo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId: job.id, station: stationNum, actor: operatorName, unit, issue, material }),
+      body: JSON.stringify({ jobId: entry.job.id, station: stationNum, actor: operatorName, unit, issue, material }),
     });
     result = await response.json();
     if (!response.ok && !result.error) result.error = "REDO submission failed";
@@ -611,24 +658,14 @@ $("redoSubmit").onclick = async () => {
   $("redoSubmit").disabled = !redoReady;
   if (result.error) { toast("Error: " + result.error); return; }
 
-  job = result.job;
-  $("redoView").style.display = "none";
-  $("jobView").style.display = "block";
-  renderCurrent();
-  const despatch = result.applied.find(change => change.field === "s3");
-  $("cascadeNote").textContent = `REDO logged (cycle ${result.cycle}).${despatch ? ` Despatch → ${despatch.to}` : ""}`;
+  // REDO writes immediately (it's an issue report, not a staged status) —
+  // reflect that in the job's list row and drop it back into the list.
+  entry.job = result.job;
+  entry.status = "saved";
+  entry.pendingValue = `REDO — cycle ${result.cycle}`;
   toast(`REDO report submitted ✓ Cycle ${result.cycle}`);
-  clearTimeout(advanceTimer);
-  resetJobState();
-  currentRef = "";
-  refQueue = [];
-  advanceTimer = setTimeout(() => {
-    $("redoView").style.display = "none";
-    $("jobView").style.display = "none";
-    $("scanView").style.display = "block";
-    renderQueue();
-    $("refInput").focus();
-  }, 2400);
+  $("redoView").style.display = "none";
+  backToList();
 };
 
 function showUpdateError(message) {

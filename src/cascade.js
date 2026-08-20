@@ -4,15 +4,19 @@
 // "MATERIAL PLANNER CORE SCRIPT - v7 FINAL". Field names s1..s7 map to
 // Station 1..7 columns; Station 8 uses the existing JOB STATUS column.
 
+// defaultStatus: the normal "job's done here" value for the station, used to
+// pre-stage a job in the tablet's multi-ref queue view so an operator who
+// typed in several correct refs can just Confirm All instead of re-picking
+// each one. Never a REDO/short/queue value — those always need a deliberate tap.
 const STATIONS = {
-  1: { key: "s1", name: "Planning",          responsible: "Elvis",           buttons: ["QUEUED", "DONE", "RC-X", "CHANGES", "DONE-NO PW", "REDO"] },
-  2: { key: "s2", name: "Material control",  responsible: "Joyce",           buttons: ["QUEUED", "RECEIVED CL", "DONE", "W.O.D", "ALL DLVD", "MILL PREP", "DONE-NO PW", "CUTPLAN RUN", "0", "REDO"] },
-  3: { key: "s3", name: "Material despatch", responsible: "Phoni",           buttons: ["QUEUED", "DONE", "0", "SCHEDULED", "PICK SHORT", "DEFECT-M", "DONE-NO PW", "ALLOCATED", "SASH PICKED", "SASH SHORT", "REDO"] },
-  4: { key: "s4", name: "Saw 1",             responsible: "Mimmy",           buttons: ["QUEUED", "DONE", "0", "REDO", "JOB PICKED", "PICK SHORT", "DEFECT", "DONE-NO PW", "W.I.P", "CUT-SHORT", "PICK TROLLEY"] },
-  5: { key: "s5", name: "Saw 2",             responsible: "Richard",         buttons: ["QUEUED", "DONE", "0", "REDO", "SCHEDULED", "JOB PICKED", "W.I.P", "DEFECT-M", "DONE-NO PW", "PICK SHORT", "PICK TROLLEY"] },
-  6: { key: "s6", name: "Assembly",          responsible: "Portia",          buttons: ["QUEUED", "ALL DONE", "0", "SCHEDULED", "JOB PICKED", "W.I.P", "DONE-NO PW", "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "REDO"] },
-  7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", buttons: ["QUEUE OUT", "QUEUE IN", "DONE", "REDO", "0", "W.I.P", "ORDER DUE", "DONE-NO PW", "SCHEDULED", "FRAMELESS", "CNC-DG READY", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
-  8: { key: "job_status", name: "Bead saw",  responsible: "Kerabo",          buttons: ["DONE", "BEAD SHORT", "NOT PICKED"] },
+  1: { key: "s1", name: "Planning",          responsible: "Elvis",           defaultStatus: "DONE",     buttons: ["QUEUED", "DONE", "RC-X", "CHANGES", "DONE-NO PW", "REDO"] },
+  2: { key: "s2", name: "Material control",  responsible: "Joyce",           defaultStatus: "DONE",     buttons: ["QUEUED", "RECEIVED CL", "DONE", "W.O.D", "ALL DLVD", "MILL PREP", "DONE-NO PW", "CUTPLAN RUN", "0", "REDO"] },
+  3: { key: "s3", name: "Material despatch", responsible: "Phoni",           defaultStatus: "DONE",     buttons: ["QUEUED", "DONE", "0", "SCHEDULED", "PICK SHORT", "DEFECT-M", "DONE-NO PW", "ALLOCATED", "SASH PICKED", "SASH SHORT", "REDO"] },
+  4: { key: "s4", name: "Saw 1",             responsible: "Mimmy",           defaultStatus: "DONE",     buttons: ["QUEUED", "DONE", "0", "REDO", "JOB PICKED", "PICK SHORT", "DEFECT", "DONE-NO PW", "W.I.P", "CUT-SHORT", "PICK TROLLEY"] },
+  5: { key: "s5", name: "Saw 2",             responsible: "Richard",         defaultStatus: "DONE",     buttons: ["QUEUED", "DONE", "0", "REDO", "SCHEDULED", "JOB PICKED", "W.I.P", "DEFECT-M", "DONE-NO PW", "PICK SHORT", "PICK TROLLEY"] },
+  6: { key: "s6", name: "Assembly",          responsible: "Portia",          defaultStatus: "ALL DONE", buttons: ["QUEUED", "ALL DONE", "0", "SCHEDULED", "JOB PICKED", "W.I.P", "DONE-NO PW", "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "REDO"] },
+  7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", defaultStatus: "DONE",     buttons: ["QUEUE OUT", "QUEUE IN", "DONE", "REDO", "0", "W.I.P", "ORDER DUE", "DONE-NO PW", "SCHEDULED", "FRAMELESS", "CNC-DG READY", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
+  8: { key: "job_status", name: "Bead saw",  responsible: "Kerabo",          defaultStatus: "DONE",     buttons: ["DONE", "BEAD SHORT", "NOT PICKED", "REDO"] },
 };
 
 const REDO_VALUE = "REDO";
@@ -50,7 +54,10 @@ function applyCascade(job, stationNum, rawValue) {
 
   // REDO is an issue-report workflow, not a production cascade. The server
   // rejects this sentinel from /api/update and accepts REDO only via /api/redo.
-  if (value === REDO_VALUE && stationNum !== 8) {
+  // Applies to every station, Bead Saw included — station 8's "key" is the
+  // shared job_status column, so without this early return a stray /api/update
+  // call would clobber the combined cascade value with the literal "REDO".
+  if (value === REDO_VALUE) {
     return { [st.key]: REDO_VALUE, _redo: true };
   }
 
