@@ -114,6 +114,20 @@ button.big.redo-btn:active {
     <div style="margin:14px 0 10px;display:flex;align-items:center;gap:10px;">
       <span style="font-size:14px;color:var(--muted);">This station now:</span><span class="pill queue" id="currentVal">—</span>
     </div>
+    <section id="repickPanel" style="display:none;margin:14px 0;padding:16px;border:1.5px solid var(--accent);border-radius:10px;background:var(--accent-dim);">
+      <h2 style="font-size:18px;color:var(--accent);">REPICK REQUIRED</h2>
+      <p style="margin-top:5px;color:var(--muted);font-size:13px;line-height:1.45;">After the replacement material has been picked, select the matching issue below.</p>
+      <div id="repickList" style="display:grid;gap:10px;margin-top:12px;"></div>
+      <div id="repickConfirmPanel" class="confirm-panel" style="display:none;margin-top:12px;">
+        <strong id="repickConfirmTitle">Selected: </strong>
+        <p id="repickConfirmText" style="margin-top:6px;color:var(--muted);line-height:1.45;"></p>
+        <div class="confirm-actions">
+          <button class="big" id="clearRepick" type="button" style="min-height:58px;">Clear selection</button>
+          <button class="big" id="confirmRepick" type="button" style="min-height:58px;border-color:var(--accent);">Confirm REPICK complete</button>
+        </div>
+      </div>
+      <p id="repickError" style="display:none;margin-top:10px;color:var(--bad);font-weight:600;"></p>
+    </section>
     <p id="sheetNotice" style="display:none;margin-bottom:12px;font-size:13px;color:var(--bad);"></p>
     <div id="buttons" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;"></div>
     <div id="confirmPanel" class="confirm-panel" style="display:none;">
@@ -216,6 +230,9 @@ let pendingButton = null;
 let initialQueued = false;
 let redoReady = false;
 let sheetConnected = false;
+let repickIssues = [];
+let selectedRepick = null;
+let repickLoadToken = 0;
 const PREVIEW_MESSAGE = "Preview only — status buttons are disabled because this server has no live Sheet bridge. Start the Windows server with SHEET_WEBAPP_URL and SHEET_TOKEN in the same PowerShell window.";
 
 function activeEntry() { return activeIndex >= 0 ? queueJobs[activeIndex] : null; }
@@ -488,6 +505,8 @@ $("confirmAllBtn").onclick = async () => {
 };
 
 function backToList() {
+  clearRepickSelection();
+  $("repickPanel").style.display = "none";
   activeIndex = -1;
   $("jobView").style.display = "none";
   $("redoView").style.display = "none";
@@ -510,6 +529,7 @@ function openDetail(i) {
   $("jobQueueStatus").textContent = `Job ${i + 1} of ${queueJobs.length}`;
   renderCurrent();
   renderButtons();
+  loadRepickIssues(entry);
   showUpdateError("");
   $("cascadeNote").textContent = "";
   if (entry.status === "staged" && entry.pendingValue) {
@@ -526,6 +546,95 @@ function renderCurrent() {
   $("currentVal").textContent = display;
   $("currentVal").className = "pill " + classify(raw);
 }
+
+async function loadRepickIssues(entry) {
+  const token = ++repickLoadToken;
+  repickIssues = [];
+  clearRepickSelection();
+  $("repickPanel").style.display = "none";
+  if (stationNum !== 3 || !entry?.job) return;
+  const ref = entry.job.biz_ref || entry.job.task_no;
+  try {
+    const response = await fetch(`/api/issues?ref=${encodeURIComponent(ref)}`);
+    const issues = await response.json();
+    if (token !== repickLoadToken || entry !== activeEntry()) return;
+    if (!response.ok) throw new Error(issues.error || "Could not load REPICK issues");
+    repickIssues = issues.filter((issue) => !issue.repick_done);
+    renderRepickIssues();
+  } catch (err) {
+    if (token !== repickLoadToken || entry !== activeEntry()) return;
+    $("repickPanel").style.display = "block";
+    $("repickList").innerHTML = "";
+    $("repickError").textContent = err.message || "Could not load REPICK issues";
+    $("repickError").style.display = "block";
+  }
+}
+
+function renderRepickIssues() {
+  const panel = $("repickPanel");
+  const list = $("repickList");
+  list.innerHTML = "";
+  $("repickError").style.display = "none";
+  panel.style.display = repickIssues.length ? "block" : "none";
+  for (const issue of repickIssues) {
+    const card = document.createElement("div");
+    card.style.cssText = "padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);";
+    card.innerHTML = `<strong>REPICK${esc(issue.cycle)} · ${esc(issue.unit)}</strong>
+      <div style="margin-top:5px;color:var(--muted);font-size:13px;line-height:1.45;">${esc(issue.issue)}${issue.material ? ` · ${esc(issue.material)}` : ""}<br>Reported by ${esc(issue.operator)} at Station ${esc(issue.station)}</div>
+      <button class="big" type="button" data-repick-id="${esc(issue.id)}" style="width:100%;min-height:54px;margin-top:10px;">Select REPICK${esc(issue.cycle)} complete</button>`;
+    list.appendChild(card);
+  }
+  list.querySelectorAll("[data-repick-id]").forEach((button) => {
+    button.onclick = () => selectRepick(Number(button.dataset.repickId), button);
+  });
+}
+
+function selectRepick(issueId, button) {
+  selectedRepick = repickIssues.find((issue) => Number(issue.id) === issueId) || null;
+  if (!selectedRepick) return;
+  $("repickList").querySelectorAll("button").forEach((item) => item.classList.remove("status-selected"));
+  button.classList.add("status-selected");
+  const ref = activeEntry()?.job?.biz_ref || activeEntry()?.job?.task_no || "this job";
+  $("repickConfirmTitle").textContent = `Selected: REPICK${selectedRepick.cycle} complete`;
+  $("repickConfirmText").textContent = `${operatorName} confirms the replacement material for ${ref}, ${selectedRepick.unit}, has been picked. Tap Confirm REPICK complete to write REDONE${selectedRepick.cycle} to the Material Planner.`;
+  $("confirmRepick").disabled = !sheetConnected || !redoReady;
+  $("repickError").style.display = "none";
+  $("repickConfirmPanel").style.display = "block";
+  $("repickConfirmPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function clearRepickSelection() {
+  selectedRepick = null;
+  $("repickList")?.querySelectorAll("button").forEach((item) => item.classList.remove("status-selected"));
+  if ($("repickConfirmPanel")) $("repickConfirmPanel").style.display = "none";
+  if ($("repickError")) $("repickError").style.display = "none";
+}
+
+$("clearRepick").onclick = clearRepickSelection;
+$("confirmRepick").onclick = async () => {
+  if (!selectedRepick || !sheetConnected || !redoReady) return;
+  const issue = selectedRepick;
+  $("confirmRepick").disabled = true;
+  $("repickError").style.display = "none";
+  try {
+    const response = await fetch("/api/redo/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ issueId: issue.id, actor: operatorName }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) throw new Error(result.error || "REPICK completion failed");
+    const entry = activeEntry();
+    if (entry) entry.job = result.job;
+    renderCurrent();
+    toast(`REPICK${issue.cycle} complete ✓ REDONE${issue.cycle} saved`);
+    await loadRepickIssues(entry);
+  } catch (err) {
+    $("repickError").textContent = err.message || "REPICK completion failed";
+    $("repickError").style.display = "block";
+    $("confirmRepick").disabled = false;
+  }
+};
 
 function renderButtons() {
   // Picking a status only stages it locally — it never touches the Sheet by
