@@ -38,14 +38,24 @@ function doGet(e) {
       if (!_isPlannerTab_(tab)) return;
       var last = sheet.getLastRow();
       if (last < DATA_START_ROW) return;
-      var rows = sheet.getRange(DATA_START_ROW, 1, last - DATA_START_ROW + 1, 22).getValues();
+      var rows = sheet.getRange(DATA_START_ROW, 1, last - DATA_START_ROW + 1, 23).getValues();
       rows.forEach(function (r) {
-        var taskNo = _s_(r[0]), bizRef = _s_(r[3]), customer = _s_(r[4]);
-        if (!taskNo && !bizRef) return;
-        if (taskNo.toUpperCase().indexOf('REF') !== -1 || bizRef.toUpperCase().indexOf('BIZMAN') !== -1 || !customer) return;
-        if (!all && taskNo.toUpperCase() !== q && bizRef.toUpperCase() !== q) return;
+        var taskNo = _s_(r[0]);
+        var bizRef = _s_(r[3]);
+        // D is primary. N sometimes mirrors it via formula on JOBS IN QUEUE
+        // before D itself is filled in (confirmed live 2026-08-20 -- a ref
+        // can sit in N with D still blank). W checked defensively too, per
+        // an older, never-verified note flagging it as a possible 3rd ref
+        // slot -- exact-match only, so a wrong guess here can't misfire.
+        var nRef = _s_(r[13]);
+        var wRef = _s_(r[22]);
+        var effectiveRef = bizRef || nRef || wRef;
+        var customer = _s_(r[4]);
+        if (!taskNo && !effectiveRef) return;
+        if (taskNo.toUpperCase().indexOf('REF') !== -1 || effectiveRef.toUpperCase().indexOf('BIZMAN') !== -1 || !customer) return;
+        if (!all && taskNo.toUpperCase() !== q && _u_(bizRef) !== q && _u_(nRef) !== q && _u_(wRef) !== q) return;
         jobs.push({
-          task_no: taskNo, biz_ref: bizRef, customer: customer,
+          task_no: taskNo, biz_ref: effectiveRef, customer: customer,
           install_date: _date_(r[1], tz), send_to_dash: _s_(r[2]), colour: _s_(r[5]),
           qty_windows: _num_(r[6]), qty_hinged: _num_(r[7]), qty_folding: _num_(r[8]),
           qty_palace: _num_(r[9]), qty_specials: _num_(r[10]), qty_elite: _num_(r[11]),
@@ -247,9 +257,13 @@ function _findRow_(sheet, taskNo, bizRef) {
   var count = last - DATA_START_ROW + 1;
   if (count < 1) return -1;
   var task = _s_(taskNo), ref = _u_(bizRef);
-  var keys = sheet.getRange(DATA_START_ROW, 1, count, 4).getValues();
+  // Same D/N/W fallback as doGet's job listing -- see the comment there.
+  var keys = sheet.getRange(DATA_START_ROW, 1, count, 23).getValues();
   for (var i = 0; i < keys.length; i++) {
-    if ((task && _s_(keys[i][0]) === task) || (!task && ref && _u_(keys[i][3]) === ref)) return DATA_START_ROW + i;
+    if (task && _s_(keys[i][0]) === task) return DATA_START_ROW + i;
+    if (ref && (_u_(keys[i][3]) === ref || _u_(keys[i][13]) === ref || _u_(keys[i][22]) === ref)) {
+      return DATA_START_ROW + i;
+    }
   }
   return -1;
 }
