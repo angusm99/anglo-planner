@@ -25,6 +25,17 @@ test("ISSUE LOG uses a named installable trigger, not a competing onEdit", () =>
   assert.doesNotMatch(source, /function\s+onEdit\s*\(/);
 });
 
+test("uses SpreadsheetApp.openById everywhere, never getActive", () => {
+  // FACTORY TERMINAL is a standalone script (not bound to the sheet) --
+  // getActive() has no "active" spreadsheet in a doGet/doPost web-app call
+  // and returns null there, so every SpreadsheetApp call must go through
+  // openById(SPREADSHEET_ID) instead. Can't be caught by running the code
+  // (no real SpreadsheetApp in Node), only by checking it's not there.
+  assert.doesNotMatch(source, /SpreadsheetApp\.getActive/);
+  assert.match(source, /SPREADSHEET_ID\s*=\s*'111LJiZGBg8_HaT3ruWWx9RmY_UTheTUzFFYcCOj0Umw'/);
+  assert.match(source, /function _ss_\(\)\s*{\s*return SpreadsheetApp\.openById\(SPREADSHEET_ID\);/);
+});
+
 test("ref lookup and row-finding check D, N and W, not just D", () => {
   // Confirmed live 2026-08-20: a ref can sit in column N on JOBS IN QUEUE
   // (index 13) with D still blank. Column D reads are index 3; a fallback

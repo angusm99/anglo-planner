@@ -13,12 +13,21 @@
  *      plannerCore.gs onEdit(e) function.
  */
 
+var SPREADSHEET_ID = '111LJiZGBg8_HaT3ruWWx9RmY_UTheTUzFFYcCOj0Umw';
 var DATA_START_ROW = 4;
 var COL = { s1: 15, s2: 16, s3: 17, s4: 18, s5: 19, s6: 20, s7: 21, job_status: 22 };
 var MONTH_TAB = /^(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)-\d{4}$/;
 var ISSUE_LOG_NAME = 'ISSUE LOG';
 var ISSUE_LOG_HEADERS = ['Date', 'Biz Ref', 'Station', 'Operator', 'Unit', 'Issue', 'Material', 'Repick Done', 'Cycle'];
 var CAPABILITIES = ['station_update', 'issue_log', 'repick_done'];
+
+// This is a standalone script -- not bound to the Material Planner sheet --
+// so SpreadsheetApp's "get the active spreadsheet" call has no active
+// spreadsheet to resolve in a doGet/doPost web-app call and returns null.
+// Always open by ID instead.
+function _ss_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
 
 function doGet(e) {
   try {
@@ -30,7 +39,7 @@ function doGet(e) {
     var all = e.parameter.all === '1';
     if (!q && !all) return _json_({ ok: false, error: 'ref or all=1 required' });
 
-    var ss = SpreadsheetApp.getActive();
+    var ss = _ss_();
     var tz = Session.getScriptTimeZone();
     var jobs = [];
     ss.getSheets().forEach(function (sheet) {
@@ -96,7 +105,7 @@ function doPost(e) {
 }
 
 function _writeStationUpdate_(body) {
-  var sheet = SpreadsheetApp.getActive().getSheetByName(body.tab);
+  var sheet = _ss_().getSheetByName(body.tab);
   if (!sheet) return _json_({ ok: false, error: 'no tab: ' + body.tab });
   var row = _findRow_(sheet, body.task_no, body.biz_ref);
   if (row < 0) return _json_({ ok: false, error: 'row not found' });
@@ -123,7 +132,7 @@ function _appendIssue_(body) {
     return _json_({ ok: false, error: 'invalid issue_log payload' });
   }
 
-  var planner = SpreadsheetApp.getActive().getSheetByName(body.tab);
+  var planner = _ss_().getSheetByName(body.tab);
   if (!planner) return _json_({ ok: false, error: 'no tab: ' + body.tab });
   var plannerRow = _findRow_(planner, body.task_no, bizRef);
   if (plannerRow < 0) return _json_({ ok: false, error: 'row not found' });
@@ -171,7 +180,7 @@ function _findIssueRow_(sheet, bizRef, unit, cycle) {
 function _completeRepick_(body) {
   var cycle = Number(body.cycle);
   if (!cycle || cycle < 1) return _json_({ ok: false, error: 'invalid cycle' });
-  var sheet = SpreadsheetApp.getActive().getSheetByName(body.tab);
+  var sheet = _ss_().getSheetByName(body.tab);
   if (!sheet) return _json_({ ok: false, error: 'no tab: ' + body.tab });
   var row = _findRow_(sheet, body.task_no, body.biz_ref);
   if (row < 0) return _json_({ ok: false, error: 'row not found' });
@@ -181,7 +190,7 @@ function _completeRepick_(body) {
 }
 
 function installIssueLogTrigger() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = _ss_();
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     if (trigger.getHandlerFunction() === 'handleIssueLogEdit') ScriptApp.deleteTrigger(trigger);
   });
@@ -211,13 +220,15 @@ function handleIssueLogEdit(e) {
 
 function _writeRedoneAcrossPlanner_(bizRef, cycle) {
   var wrote = [];
-  SpreadsheetApp.getActive().getSheets().forEach(function (sheet) {
+  _ss_().getSheets().forEach(function (sheet) {
     if (!_isPlannerTab_(sheet.getName())) return;
     var last = sheet.getLastRow();
     if (last < DATA_START_ROW) return;
-    var refs = sheet.getRange(DATA_START_ROW, 4, last - DATA_START_ROW + 1, 1).getValues();
-    refs.forEach(function (cell, i) {
-      if (_u_(cell[0]) === bizRef) {
+    // Same D/N/W fallback as _findRow_ -- a ref checked off in ISSUE LOG
+    // still needs to resolve even if this row's D is blank.
+    var refs = sheet.getRange(DATA_START_ROW, 1, last - DATA_START_ROW + 1, 23).getValues();
+    refs.forEach(function (row, i) {
+      if (_u_(row[3]) === bizRef || _u_(row[13]) === bizRef || _u_(row[22]) === bizRef) {
         sheet.getRange(DATA_START_ROW + i, COL.s3).setValue('REDONE' + cycle);
         wrote.push(sheet.getName() + ' R' + (DATA_START_ROW + i));
       }
@@ -227,7 +238,7 @@ function _writeRedoneAcrossPlanner_(bizRef, cycle) {
 }
 
 function _markIssueDone_(bizRef, unit, cycle) {
-  var sheet = SpreadsheetApp.getActive().getSheetByName(ISSUE_LOG_NAME);
+  var sheet = _ss_().getSheetByName(ISSUE_LOG_NAME);
   if (!sheet || sheet.getLastRow() < 2) return;
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
   rows.forEach(function (r, i) {
@@ -238,7 +249,7 @@ function _markIssueDone_(bizRef, unit, cycle) {
 }
 
 function _issueSheet_() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = _ss_();
   var sheet = ss.getSheetByName(ISSUE_LOG_NAME);
   if (!sheet) sheet = ss.insertSheet(ISSUE_LOG_NAME);
   var current = sheet.getRange(1, 1, 1, ISSUE_LOG_HEADERS.length).getValues()[0];
