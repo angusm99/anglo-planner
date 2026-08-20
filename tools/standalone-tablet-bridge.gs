@@ -8,9 +8,10 @@
  *   1. Replace the FACTORY TERMINAL web-app Code.gs with this file.
  *   2. Preserve the existing PLANNER_TOKEN Script Property.
  *   3. Deploy a new web-app version (execute as owner; access Anyone).
- *   4. Run installIssueLogTrigger() once from the editor and authorise it.
- *      This uses a named installable trigger and does NOT conflict with the
- *      plannerCore.gs onEdit(e) function.
+ *   4. Optional spreadsheet fallback: run installIssueLogTrigger() once and
+ *      authorise it if ticking ISSUE LOG should also complete a REPICK. The
+ *      normal floor workflow uses Confirm REPICK complete on the Station 3
+ *      tablet, so the trigger is not required for tablet completion.
  */
 
 var SPREADSHEET_ID = '111LJiZGBg8_HaT3ruWWx9RmY_UTheTUzFFYcCOj0Umw';

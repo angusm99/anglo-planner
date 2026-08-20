@@ -72,7 +72,7 @@ sheet-imported jobs**. Jobs added in the office app survive a re-import.
 | REDO rules | `src/redo.js` | Validates issue reports and produces numbered `REPICKn` / `REDONEn` transitions. |
 | Office UI | `public/office.html` | Legacy utility retained but not exposed on the factory landing page. |
 
-Tests: `npm test` (46 cascade, QR, Sheet-payload, REDO and bridge-contract checks).
+Tests: `npm test` (55 cascade, QR, Sheet-payload, REDO, station-workflow and bridge-contract checks).
 
 ## Sheet sync (sheet stays master)
 
@@ -109,9 +109,13 @@ Office edits are **not** pushed (office-only jobs have no Sheet row).
 
 `tools/standalone-tablet-bridge.gs` is the reviewed v2 replacement bridge. It
 adds the exact nine-column `ISSUE LOG`, idempotent issue submission, numbered
-`REPICKn` / `REDONEn`, and a named installable `handleIssueLogEdit` trigger. It
-does **not** define another `onEdit`, so it cannot replace or conflict with the
-planner's existing `plannerCore.gs` trigger.
+`REPICKn` / `REDONEn`, plus a named optional `handleIssueLogEdit` trigger. The
+normal completion path is now the deliberate **Confirm REPICK complete** action
+on the Station 3 tablet; it writes `REDONEn` through the confirmed Sheet bridge
+and marks the matching ISSUE LOG checkbox. The trigger is retained only as an
+optional spreadsheet-side fallback. It does **not** define another `onEdit`, so
+it cannot replace or conflict with the planner's existing `plannerCore.gs`
+trigger.
 
 `ISSUE LOG` is initialised automatically: the bridge creates the tab and writes
 the exact nine headers on first REDO transfer if the tab is missing or row 1 is
@@ -122,8 +126,9 @@ an issue row. If row 1 already contains different headers, it fails loudly with
 
 REDO remains visibly locked until the deployed bridge advertises both
 `issue_log` and `repick_done` capabilities. To activate it, replace the
-standalone bridge code, deploy a new web-app version, and run
-`installIssueLogTrigger()` once. Do not replace `plannerCore.gs`.
+standalone bridge code and deploy a new web-app version. Run
+`installIssueLogTrigger()` only if the ISSUE LOG checkbox should also work as a
+manual fallback. Do not replace `plannerCore.gs`.
 
 ## Phase 2
 
@@ -134,7 +139,7 @@ Done:
 - Reviewed REDO UI, rules and v2 bridge package (activation pending)
 
 Still to build:
-- Deploy and live-prove the v2 REDO bridge and ISSUE LOG trigger
+- Complete one live Station 3 `REPICKn` → `REDONEn` confirmation proof
 - Cover-sheet QR printing workflow
 - Calendar checker sync port; lead-time reports from the events table
 - Simple PIN per station / user accounts before factory rollout
