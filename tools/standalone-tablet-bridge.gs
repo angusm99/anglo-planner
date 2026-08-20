@@ -133,7 +133,7 @@ function _appendIssue_(body) {
   var unit = _u_(body.unit);
   var issue = _s_(body.issue);
   var cycle = Number(body.cycle);
-  if (!bizRef || station < 1 || station > 7 || !unit || !issue || !cycle) {
+  if (!bizRef || station < 1 || station > 8 || !unit || !issue || !cycle) {
     return _json_({ ok: false, error: 'invalid issue_log payload' });
   }
 
@@ -142,7 +142,9 @@ function _appendIssue_(body) {
   var plannerRow = _findRow_(planner, body.task_no, bizRef);
   if (plannerRow < 0) return _json_({ ok: false, error: 'row not found' });
 
-  var lock = LockService.getDocumentLock();
+  // FACTORY TERMINAL is standalone, so getDocumentLock() returns null.
+  // A script lock safely serialises concurrent web-app issue submissions.
+  var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return _json_({ ok: false, error: 'issue log busy; retry' });
   try {
     var sheet = _issueSheet_();
@@ -161,7 +163,9 @@ function _appendIssue_(body) {
 
     var repick = 'REPICK' + cycle;
     var wrote = [];
-    if (station !== 3) {
+    // Stations 1–7 have their own sheet columns. Station 8 (Bead Saw) uses
+    // Job Status for normal work, but REDO must only notify Despatch via REPICK.
+    if (station !== 3 && station <= 7) {
       planner.getRange(plannerRow, COL['s' + station]).setValue('REDO');
       wrote.push('s' + station);
     }

@@ -129,7 +129,10 @@ async function postConfirmed(payload, label) {
       let parsed = null;
       try { parsed = JSON.parse(response.body || "{}"); } catch (_) { /* handled below */ }
       if (parsed?.ok === true) return true;
-      if (attempt === 2) console.error(`[sheet] ${label} not confirmed (${response.status})`);
+      if (attempt === 2) {
+        const detail = parsed?.error ? `: ${parsed.error}` : "";
+        console.error(`[sheet] ${label} not confirmed (${response.status})${detail}`);
+      }
     } catch (e) {
       if (attempt === 2) console.error(`[sheet] ${label} failed: ${e.message}`);
     }

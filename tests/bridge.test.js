@@ -25,6 +25,18 @@ test("ISSUE LOG uses a named installable trigger, not a competing onEdit", () =>
   assert.doesNotMatch(source, /function\s+onEdit\s*\(/);
 });
 
+test("standalone ISSUE LOG uses a script lock, never a document lock", () => {
+  // getDocumentLock() returns null in this standalone web app, which caused
+  // every live REDO submission to fail before ISSUE LOG could append a row.
+  assert.match(source, /LockService\.getScriptLock\(\)/);
+  assert.doesNotMatch(source, /LockService\.getDocumentLock\(\)/);
+});
+
+test("ISSUE LOG accepts Station 8 without trying to write a nonexistent s8 column", () => {
+  assert.match(source, /station > 8/);
+  assert.match(source, /station !== 3 && station <= 7/);
+});
+
 test("uses SpreadsheetApp.openById everywhere, never getActive", () => {
   // FACTORY TERMINAL is a standalone script (not bound to the sheet) --
   // getActive() has no "active" spreadsheet in a doGet/doPost web-app call
