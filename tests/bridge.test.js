@@ -36,14 +36,18 @@ test("uses SpreadsheetApp.openById everywhere, never getActive", () => {
   assert.match(source, /function _ss_\(\)\s*{\s*return SpreadsheetApp\.openById\(SPREADSHEET_ID\);/);
 });
 
-test("ref lookup and row-finding check D, N and W, not just D", () => {
+test("ref lookup and row-finding check D, M, N and W, not just D", () => {
   // Confirmed live 2026-08-20: a ref can sit in column N on JOBS IN QUEUE
-  // (index 13) with D still blank. Column D reads are index 3; a fallback
-  // to a bare index-3-only check would silently reintroduce this bug.
+  // (index 13) with D still blank. M (index 12) and W (index 22) are
+  // unresolved -- plannerCore.gs's handleSendToPrintTransfer_ treats them as
+  // BIZREF_2/BIZREF_3 and falls back through both on every live cover-sheet
+  // print, contradicting export_xlsx.py's glasslist reading of M. Checked
+  // anyway: exact-match only, so a wrong guess here can't misfire.
   assert.match(source, /getRange\(DATA_START_ROW, 1, last - DATA_START_ROW \+ 1, 23\)/);
   assert.match(source, /getRange\(DATA_START_ROW, 1, count, 23\)/);
   const findRow = source.slice(source.indexOf("function _findRow_"));
   assert.match(findRow, /keys\[i\]\[3\]/);
+  assert.match(findRow, /keys\[i\]\[12\]/);
   assert.match(findRow, /keys\[i\]\[13\]/);
   assert.match(findRow, /keys\[i\]\[22\]/);
 });
