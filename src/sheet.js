@@ -108,13 +108,13 @@ async function fetchSheetJobs(params) {
 }
 
 async function fetchSheetCapabilities() {
-  if (!URL_STR) return [];
+  if (!URL_STR) return null;
   try {
     const body = JSON.parse(await get({ capabilities: "1" }));
     return body.ok && Array.isArray(body.capabilities) ? body.capabilities : [];
   } catch (e) {
     console.error(`[sheet] capability check failed: ${e.message}`);
-    return [];
+    return null;
   }
 }
 

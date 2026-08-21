@@ -134,6 +134,10 @@ async function refreshFromSheet() {
 
 async function refreshSheetCapabilities() {
   const capabilities = await fetchSheetCapabilities();
+  if (capabilities === null) {
+    console.log(`[sheet] REDO bridge: ${redoBridgeReady ? "READY" : "NOT READY"} (last known; capability check failed)`);
+    return [];
+  }
   redoBridgeReady = capabilities.includes("issue_log") && capabilities.includes("repick_done");
   console.log(`[sheet] REDO bridge: ${redoBridgeReady ? "READY" : "NOT READY"}`);
   return capabilities;
