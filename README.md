@@ -29,6 +29,8 @@ node src/server.js
   current rollout scope.
 
 Each tablet on the floor gets pinned (kiosk mode) to its own station URL.
+For repeatable setup of Tablet 1 through Tablet 5, use
+`TABLET_ROLLOUT.md` and `tools/setup-factory-tablet.ps1`.
 
 Theme: dark (black/Anglo yellow) by default; the Light/Dark button in the header
 toggles per device and is remembered in localStorage.
@@ -136,10 +138,10 @@ Done:
 - Office/admin view: add jobs, edit install dates, send-to-dash, job-status overrides
 - Confirmed Station → Sheet writeback (Sheet stays master)
 - Cover-sheet QR scanning and Station 8 Bead Saw
-- Reviewed REDO UI, rules and v2 bridge package (activation pending)
+- Live Station 3 `REPICKn` → `REDONEn` proof through the Sheet bridge
+- Reviewed REDO UI, rules and v2 bridge package
 
 Still to build:
-- Complete one live Station 3 `REPICKn` → `REDONEn` confirmation proof
 - Cover-sheet QR printing workflow
 - Calendar checker sync port; lead-time reports from the events table
 - Simple PIN per station / user accounts before factory rollout
