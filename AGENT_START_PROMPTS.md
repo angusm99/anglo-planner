@@ -1,22 +1,59 @@
-# Factory Terminal milestone prompts for new agent chats
+# Factory Terminal agent pickup prompts
 
-Use these prompts when starting fresh Manus or Claude chats for this project.
-They are intentionally blunt because this project has had parallel-build drift
-before.
+Use this file when starting fresh Manus or Claude Code chats for the Anglo
+Windows Factory Terminal / Material Planner tablet project.
+
+This is a milestone handoff. Tablet 1 is in live field testing. Keep the app
+stable unless Angus explicitly asks for changes.
+
+## Current milestone
+
+- Canonical repo: `C:\Users\angusm\CLAUDE MASTER\anglo-planner`
+- GitHub: `https://github.com/angusm99/anglo-planner`
+- Branch: `master`
+- Latest pushed app commit at this handoff: `539a4495125409de422edc4588e2c54398f75c2b`
+- Live tablet URL: `http://192.168.0.84:3300/`
+- Tablet 1: HTC AT01, serial `FS44BPC01070`
+- Shortcut on Tablet 1: `Factory Terminal - Anglo Windows`
+
+The Google Sheet is the master. The tablets are only a clean factory-floor
+interface for writing back to that Sheet. SQLite is a local cache, not the
+source of truth.
+
+## Current field-test boundary
+
+Angus is field-testing normal station updates from Tablet 1. REDO / REPICK has
+been proven, but it is not being used as the active workflow right now.
+
+Do not implement the next REDO improvement during this field test unless Angus
+explicitly asks. The parked improvement is:
+
+Add a length field/option to REDO material details. This will need a deliberate
+Sheet bridge and ISSUE LOG contract change, plus tests and a controlled live
+test.
+
+## Pending operational action
+
+A hardening fix was pushed in commit `539a449` so transient Google HTML/empty
+responses do not knock a previously READY REDO bridge back to NOT READY. It
+will only affect the live tablet after the local server is restarted.
+
+Angus plans to restart at lunchtime when the operator takes a break:
+
+```powershell
+cd "C:\Users\angusm\CLAUDE MASTER\anglo-planner"
+.\tools\start-live-server.ps1 -WebAppUrl "https://script.google.com/macros/s/AKfycbxpSODFH2FRTYETSmHsOl185USvyqtAuez5EIfFcOAM5JjSa7x7aa5S-rcGw5LTfFyyBg/exec"
+```
+
+Angus enters `PLANNER_TOKEN` locally. Do not ask him to paste secrets in chat.
 
 ## Manus start prompt
 
 ```text
-You are working on the canonical Anglo Windows Factory Terminal project only.
+You are working on the canonical Anglo Windows Factory Terminal repository only.
 
-Current milestone: the working app is live-field-test ready. Tablet 1 / HTC AT01
-has successfully updated the master Google Sheet through the app, REDO / REPICK
-has been proven, and the tablet runs over factory Wi-Fi at:
-
-http://192.168.0.84:3300/
-
-Do not create a new Factory Terminal build, sandbox replacement, or parallel app.
-The canonical local repository is:
+Do not create a new build, sandbox replacement, parallel Factory Terminal app,
+or standalone redesign. The current working path is:
 
 C:\Users\angusm\CLAUDE MASTER\anglo-planner
 
@@ -28,60 +65,44 @@ Branch:
 
 master
 
-Before suggesting or changing anything, read:
+Latest pushed commit at handoff:
+
+539a4495125409de422edc4588e2c54398f75c2b
+
+Read these before advising or changing anything:
 
 1. C:\Users\angusm\CLAUDE MASTER\anglo-planner\README.md
 2. C:\Users\angusm\CLAUDE MASTER\anglo-planner\TABLET_ROLLOUT.md
 3. C:\Users\angusm\CLAUDE MASTER\anglo-planner\AGENT_START_PROMPTS.md
 4. C:\Users\angusm\Documents\Obsidian Vault\ANGLO WINDOWS\ANGLO CORE\06 - Software and Systems\Material Planner Dashboard.md
 
-The Google Sheet remains the master. SQLite is only a cache. Tablet updates must
-write to the deployed Apps Script bridge first and only update the local cache
-after Sheet confirmation.
+Milestone state:
 
-Live bridge facts:
+- Tablet 1 / HTC AT01 serial FS44BPC01070 is the working field-test baseline.
+- The tablet uses factory Wi-Fi at http://192.168.0.84:3300/.
+- The Google Sheet remains master.
+- Tablet writes must be confirmed by the Apps Script Sheet bridge before the local cache changes.
+- Normal station updates are the current field-test workflow.
+- REDO / REPICK is proven but not being used right now.
+- Do not work on the REDO material length field unless Angus explicitly asks.
 
-- Server is local on the planner PC at port 3300.
-- Floor tablets use the LAN URL, not USB reverse:
-  http://192.168.0.84:3300/
-- Live startup is:
-  C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\start-live-server.ps1
-- Do not ask Angus to paste secrets in chat.
-- Do not redeploy Apps Script unless explicitly asked.
+Live server startup:
 
-Tablet rollout facts:
+C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\start-live-server.ps1
 
-- Tablet 1 / HTC AT01 serial FS44BPC01070 is the golden baseline.
-- Home shortcut: Factory Terminal — Anglo Windows.
-- Repeat setup helper:
-  C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\setup-factory-tablet.ps1
-- Rollout runbook:
-  C:\Users\angusm\CLAUDE MASTER\anglo-planner\TABLET_ROLLOUT.md
+Do not request, print, store, or repeat PLANNER_TOKEN. Angus enters it locally.
 
 Known infrastructure risk:
 
-- Reserve router DHCP for the planner PC:
-  IP: 192.168.0.84
-  MAC: 3C-AB-72-4A-CD-FF
-  Adapter: USB2.0 Ethernet Adapter
+Reserve planner PC IP 192.168.0.84 for MAC 3C-AB-72-4A-CD-FF on the USB2.0 Ethernet Adapter. Until IT/router reservation is done, all tablets depend on that IP staying stable.
 
-Current field-test instruction:
-
-Do not work on new features right now. Angus is testing Tablet 1 again. Limit
-work to diagnostics, documentation, or tablet recovery unless he explicitly asks
-for code changes.
-
-Next improvement to park, not implement yet:
-
-Add a length field to REDO materials. The material needed for REDO must include
-a length option so the replacement metal/glass requirement is clearer.
+If Angus asks you to open the tablet, remember Manus cannot directly reach his USB-connected HTC tablet or his local server from a sandbox. Tell him to use Codex/local ADB or give file patches only.
 ```
 
 ## Claude Code start prompt
 
 ```text
-Start in the shared Anglo protocol, then work only in the canonical Factory
-Terminal repo.
+Start in the shared Anglo protocol, then work only in the canonical Factory Terminal repo.
 
 Canonical vault:
 
@@ -99,6 +120,10 @@ Branch:
 
 master
 
+Latest pushed commit at handoff:
+
+539a4495125409de422edc4588e2c54398f75c2b
+
 Read in order:
 
 1. C:\Users\angusm\Documents\Obsidian Vault\Systems & Processes\SESSION_START.md
@@ -109,43 +134,41 @@ Read in order:
 6. Last ~20 lines of:
    C:\Users\angusm\Documents\Obsidian Vault\Systems & Processes\AGENT_CHANNEL.jsonl
 
-Milestone state:
+Current working path:
 
-- One working path now: anglo-planner is canonical.
+- One canonical app only: anglo-planner.
 - The old Manus build is retired as an implementation target.
-- The live app is in field test with Tablet 1.
-- Google Sheet remains the source of truth.
-- Factory staff update the master Google Sheet from tablets.
-- Tablet updates must be Sheet-confirmed before the local cache changes.
-- Tests currently pass at 55/55 after the REDO / REPICK work.
+- Tablet 1 is live in field testing.
+- Google Sheet is the source of truth.
+- Tablets write to the Sheet bridge first; cache updates only after confirmation.
+- Tests passed 55/55 after commit 539a449.
 
-Live tablet facts:
+Current field-test boundary:
+
+- Normal station status updates are the active workflow.
+- REDO / REPICK is proven but not in active use right now.
+- Do not change REDO during Tablet 1 testing unless Angus explicitly authorises it.
+- Parked next improvement: add REDO material length field/option, including tablet form, server validation, Apps Script bridge, ISSUE LOG headers/payload, and tests.
+
+Live facts:
 
 - Tablet 1: HTC AT01, serial FS44BPC01070.
 - Tablet URL: http://192.168.0.84:3300/
-- Shortcut: Factory Terminal — Anglo Windows.
-- Tablet is hardened with stay-awake while powered, Wi-Fi sleep disabled,
-  max screen timeout, and Android lock task pinned.
-- Repeatable setup helper:
-  C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\setup-factory-tablet.ps1
+- Home shortcut: Factory Terminal - Anglo Windows.
+- Rollout helper: C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\setup-factory-tablet.ps1
+- Runbook: C:\Users\angusm\CLAUDE MASTER\anglo-planner\TABLET_ROLLOUT.md
+
+Pending operation:
+
+Commit 539a449 is pushed but the running PowerShell server may still need a lunchtime restart with tools/start-live-server.ps1 before Tablet 1 sees that hardening patch.
 
 Router/DHCP target:
 
-- Reserve 192.168.0.84 for the planner PC USB2.0 Ethernet Adapter.
-- MAC address: 3C-AB-72-4A-CD-FF.
+- Reserve 192.168.0.84 for MAC 3C-AB-72-4A-CD-FF.
+- Adapter: USB2.0 Ethernet Adapter / Ethernet 2.
 - Gateway discovered: 192.168.0.1.
-- Router admin was not reachable on 80/443; port 8080 is open but needs manual
-  admin access or further controlled investigation.
+- IT may need to create this reservation; no internet port forwarding is required.
 
-Do not expose or request secrets in chat. Angus enters the PLANNER_TOKEN locally
-into PowerShell when running tools/start-live-server.ps1.
-
-Do not work on the next feature during Tablet 1 testing unless Angus explicitly
-authorises it. Park this next improvement:
-
-REDO material details need a length field / length option. The material needed
-for REDO should record length, probably in both the tablet issue form and the
-ISSUE LOG payload/header contract, but this requires a deliberate Sheet bridge
-change and live-test plan.
+Do not expose secrets. Angus enters PLANNER_TOKEN locally.
 ```
 
