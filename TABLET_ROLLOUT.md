@@ -139,6 +139,52 @@ Reserve the planner PC's IP address on the router/DHCP server. Use
 Without this reservation, a future DHCP lease change will break every tablet
 shortcut at once and look like an app fault.
 
+Current reservation target:
+
+| Item | Value |
+|---|---|
+| Planner PC adapter | `USB2.0 Ethernet Adapter` |
+| Windows interface name | `Ethernet 2` |
+| MAC address | `3C-AB-72-4A-CD-FF` |
+| IP to reserve | `192.168.0.84` |
+| Gateway/router discovered | `192.168.0.1` |
+
+Read-only probe on 2026-08-21:
+
+- `192.168.0.1:80` refused.
+- `192.168.0.1:443` refused.
+- `192.168.0.1:8080` was open, but did not expose a usable admin page through
+  the command-line probe.
+
+If using a router UI, look for one of these menu names:
+
+- LAN
+- DHCP Server
+- Address Reservation
+- Static Lease
+- Reserved IP
+
+Add the MAC/IP pair above, save/apply, then restart neither the app nor the
+tablet unless the router asks for it.
+
+If router access is not available, the fallback is to set a static IP on the
+Windows adapter. Do not do that casually during live testing; it can interrupt
+the app if the DNS/gateway settings are wrong.
+
+## Parked next improvement
+
+Do not implement during the current Tablet 1 field test. The next planned
+feature is to add a length field to REDO materials, so the material needed for
+redo records a length as well as issue/material description. This will likely
+touch:
+
+- `public/station.html`
+- `src/redo.js`
+- `src/server.js`
+- `tools/standalone-tablet-bridge.gs`
+- `ISSUE LOG` headers / payload contract
+- REDO and bridge tests
+
 ## Current Tablet 1 baseline
 
 Tablet 1 / HTC AT01:

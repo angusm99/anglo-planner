@@ -31,6 +31,8 @@ node src/server.js
 Each tablet on the floor gets pinned (kiosk mode) to its own station URL.
 For repeatable setup of Tablet 1 through Tablet 5, use
 `TABLET_ROLLOUT.md` and `tools/setup-factory-tablet.ps1`.
+For fresh Manus/Claude chats, use `AGENT_START_PROMPTS.md` so agents start from
+this milestone instead of reviving old builds.
 
 Theme: dark (black/Anglo yellow) by default; the Light/Dark button in the header
 toggles per device and is remembered in localStorage.
@@ -145,3 +147,4 @@ Still to build:
 - Cover-sheet QR printing workflow
 - Calendar checker sync port; lead-time reports from the events table
 - Simple PIN per station / user accounts before factory rollout
+- REDO material length field (parked until Tablet 1 field test settles)
