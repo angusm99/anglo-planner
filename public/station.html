@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Station — Anglo planner</title>
-<link rel="icon" href="data:,">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" sizes="192x192" href="/icons/factory-terminal-192.png">
+<meta name="theme-color" content="#f6c945">
 <script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
 <link rel="stylesheet" href="/styles.css">
 <style>
@@ -49,7 +51,7 @@ button.big.redo-btn:active {
     <div><h1 id="stName">Station</h1><div class="sub" id="stWho">Choose an operator to begin</div></div>
   </div>
   <div class="right">
-    <button class="theme" onclick="location.href='/'">← Home</button>
+    <button class="theme" onclick="location.href='/?select=1'">← Home</button>
     <button class="theme" id="changeOperator" style="display:none;">Change Operator</button>
     <button class="theme terminal-mode-btn" id="terminalModeBtn" type="button">Lock Fullscreen</button>
     <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
@@ -60,7 +62,7 @@ button.big.redo-btn:active {
   <p id="terminalModeMessage" style="min-height:0;margin:0;color:var(--bad);font-size:12px;" aria-live="polite"></p>
   <section id="operatorView" class="card">
     <div class="aux-actions">
-      <button class="theme" onclick="location.href='/'">← Home</button>
+      <button class="theme" onclick="location.href='/?select=1'">← Home</button>
     </div>
     <h2 style="font-size:19px;">Who is using this station?</h2>
     <p style="color:var(--muted);font-size:14px;margin-top:7px;">Confirm the operator before looking up or updating a job.</p>

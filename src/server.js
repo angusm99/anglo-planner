@@ -3,6 +3,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFile } = require("node:child_process");
 const { open } = require("./db");
 const { STATIONS, applyCascade, norm } = require("./cascade");
 const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
@@ -16,6 +17,7 @@ const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const db = open();
 let redoBridgeReady = false;
 const redoInFlight = new Set();
+const COVER_ADMIN_HASH = 6454293043924497;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -23,6 +25,10 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ttf": "font/ttf",
+  ".webmanifest": "application/manifest+json",
   ".json": "application/json",
 };
 
@@ -64,6 +70,56 @@ function readBody(req) {
     });
     req.on("error", reject);
   });
+}
+
+function adb(args, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    execFile("adb", args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = [err.message, stderr].filter(Boolean).join("\n");
+        reject(err);
+        return;
+      }
+      resolve(String(stdout || "").trim());
+    });
+  });
+}
+
+async function adbDevices() {
+  const out = await adb(["devices"]);
+  return out.split(/\r?\n/)
+    .slice(1)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((parts) => parts.length >= 2)
+    .map(([serial, state]) => ({ serial, state }));
+}
+
+async function findTabletForStation(station) {
+  const needle = `Station ${station} -`;
+  const devices = (await adbDevices()).filter((device) => device.state === "device");
+  for (const device of devices) {
+    try {
+      const name = await adb(["-s", device.serial, "shell", "settings", "get", "global", "device_name"]);
+      if (name.includes(needle)) return { ...device, name };
+    } catch (_) {
+      // Keep probing the remaining tablets; one stale transport should not block admin exit.
+    }
+  }
+  return null;
+}
+
+async function sendTabletHome(body) {
+  const station = Number(body?.station);
+  const passwordHash = Number(body?.passwordHash);
+  if (!Number.isInteger(station) || station < 1 || station > 8) return { error: "Valid station required" };
+  if (passwordHash !== COVER_ADMIN_HASH) return { error: "Wrong password" };
+
+  const tablet = await findTabletForStation(station);
+  if (!tablet) return { error: `Station ${station} is not reachable by authorized ADB` };
+
+  await adb(["-s", tablet.serial, "shell", "am", "task", "lock", "stop"], 5000).catch(() => "");
+  await adb(["-s", tablet.serial, "shell", "input", "keyevent", "HOME"], 5000);
+  return { ok: true, station, serial: tablet.serial, name: tablet.name };
 }
 
 const JOB_COLS = `id, task_no, biz_ref, customer, colour, install_date, send_to_dash,
@@ -459,6 +515,10 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/update" && req.method === "POST") {
       const body = await readBody(req);
       const result = await updateStation(body);
+      return json(res, result.error ? 400 : 200, result);
+    }
+    if (p === "/api/tablet/admin-home" && req.method === "POST") {
+      const result = await sendTabletHome(await readBody(req));
       return json(res, result.error ? 400 : 200, result);
     }
     if (p === "/api/stream") {

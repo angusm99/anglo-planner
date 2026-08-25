@@ -13,8 +13,12 @@ stable unless Angus explicitly asks for changes.
 - Branch: `master`
 - Latest pushed app commit at this handoff: `539a4495125409de422edc4588e2c54398f75c2b`
 - Live tablet URL: `http://192.168.0.84:3300/`
-- Tablet 1: HTC AT01, serial `FS44BPC01070`
+- Tablet Station 4 / Saw 1: HTC AT01, serial `FS44BPC01070`
+- Tablet Station 8 / Bead Saw: HTC AT01, serial `FS44BPC01356`
 - Shortcut on Tablet 1: `Factory Terminal - Anglo Windows`
+- Current tablet labels: `Station 4 - SAW 1`, `Station 8 - BEAD SAW`
+- Next charging tablets for this rollout: `Station 5 - SAW 2` and
+  `Station 6 - ASSEMBLY`
 
 The Google Sheet is the master. The tablets are only a clean factory-floor
 interface for writing back to that Sheet. SQLite is a local cache, not the
@@ -79,6 +83,8 @@ Read these before advising or changing anything:
 Milestone state:
 
 - Tablet 1 / HTC AT01 serial FS44BPC01070 is the working field-test baseline.
+- Station 8 / HTC AT01 serial FS44BPC01356 has been set up for the bead saw
+  operator.
 - The tablet uses factory Wi-Fi at http://192.168.0.84:3300/.
 - The Google Sheet remains master.
 - Tablet writes must be confirmed by the Apps Script Sheet bridge before the local cache changes.
@@ -153,8 +159,9 @@ Current field-test boundary:
 Live facts:
 
 - Tablet 1: HTC AT01, serial FS44BPC01070.
-- Tablet URL: http://192.168.0.84:3300/
-- Home shortcut: Factory Terminal - Anglo Windows.
+- Station 8 tablet: HTC AT01, serial FS44BPC01356.
+- Tablet cover URLs: http://192.168.0.84:3300/cover.html?station=4, station=5, station=6, and station=8.
+- Home shortcuts: station-labelled Chrome shortcuts (`Station 4`, `Station 5`, `Station 6`, `Station 8`) that open the matching cover page.
 - Rollout helper: C:\Users\angusm\CLAUDE MASTER\anglo-planner\tools\setup-factory-tablet.ps1
 - Runbook: C:\Users\angusm\CLAUDE MASTER\anglo-planner\TABLET_ROLLOUT.md
 
@@ -171,4 +178,3 @@ Router/DHCP target:
 
 Do not expose secrets. Angus enters PLANNER_TOKEN locally.
 ```
-

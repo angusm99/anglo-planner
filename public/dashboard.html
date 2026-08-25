@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>W.I.P dashboard — Anglo planner</title>
-<link rel="icon" href="data:,">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" sizes="192x192" href="/icons/factory-terminal-192.png">
+<meta name="theme-color" content="#f6c945">
 <script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -19,7 +21,7 @@
   </div>
   <div class="right">
     <span class="live" id="liveDot" title="Live connection to the server">● live</span>
-    <button class="theme" onclick="location.href='/'">← Home</button>
+    <button class="theme" onclick="location.href='/?select=1'">← Home</button>
     <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
     <div class="clock" id="clock"></div>
   </div>

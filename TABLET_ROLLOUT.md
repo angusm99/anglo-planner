@@ -75,6 +75,36 @@ For a dedicated station tablet:
 .\tools\setup-factory-tablet.ps1 -Station 3
 ```
 
+For a named, dashboard-only station tablet:
+
+```powershell
+.\tools\setup-factory-tablet.ps1 -Serial <ADB_SERIAL> -Station 8 -DeviceLabel "Station 8 - BEAD SAW" -WallpaperPath "C:\Users\angusm\CLAUDE MASTER\anglo-planner\design-export\assets\anglo-factory-wallpaper-from-tablet1.jpg" -CleanDashboardOnly
+```
+
+For the big charging identification cover page:
+
+```powershell
+.\tools\setup-factory-tablet.ps1 -Serial <ADB_SERIAL> -Station 5 -Cover
+```
+
+Cover URLs:
+
+| Station | Cover URL |
+|---|---|
+| Station 4 | `http://192.168.0.84:3300/cover.html?station=4` |
+| Station 5 | `http://192.168.0.84:3300/cover.html?station=5` |
+| Station 6 | `http://192.168.0.84:3300/cover.html?station=6` |
+| Station 8 | `http://192.168.0.84:3300/cover.html?station=8` |
+
+The cover page is for identifying tablets while charging. It shows only the
+station label and factory use, for example `STATION-5` / `SAW-2`; operator names
+are deliberately not shown. `START NORMAL OPERATION` does not require a password
+and opens the station screen. `ADMIN / NORMAL TABLET MODE` asks for the admin
+password, then asks the local planner PC to unpin that station over authorized
+ADB and send Android `HOME`. The live server must be restarted after deploying
+the admin-home endpoint before this button can work. The admin password is not
+documented here.
+
 Station URLs:
 
 | Tablet use | URL |
@@ -89,26 +119,118 @@ Station URLs:
 | Station 7 | `http://192.168.0.84:3300/station/7` |
 | Station 8 | `http://192.168.0.84:3300/station/8` |
 
+Current station tablet names:
+
+| ADB serial | Android tablet name | Factory use |
+|---|---|---|
+| `FS44BPC01070` | `Station 4 - SAW 1` | Saw 1 |
+| `FS44BPC01356` | `Station 8 - BEAD SAW` | Bead saw operator |
+| `FS44BPC00401` | `Station 5 - SAW 2` | Saw 2 |
+| `FS44BPC01500` | `Station 6 - ASSEMBLY` | Assembly |
+
+Current tablet Wi-Fi observations from the planner PC. These are useful for IT
+asset tracking, but the critical DHCP reservation is still the planner PC at
+`192.168.0.84`; tablets browse to the PC, so their IPs are not part of the app
+contract.
+
+| Station | Current IP | Current Wi-Fi MAC observed | Notes |
+|---|---:|---|---|
+| Station 4 - SAW 1 | `192.168.0.160` | `D6-D2-A5-7D-B6-E0` | Verified by ADB IP readback and PC ARP on 2026-08-24. |
+| Station 5 - SAW 2 | `192.168.0.167` | `7A-D7-05-6F-23-8C` | Verified by ADB IP readback and PC ARP on 2026-08-24. |
+| Station 6 - ASSEMBLY | `192.168.0.176` | `3A-22-F8-62-D1-D4` | Verified by ADB IP readback and PC ARP on 2026-08-24. |
+| Station 8 - BEAD SAW | `192.168.0.131` | `1A-AE-B9-77-7B-C1` | Verified by ADB IP readback and PC ARP on 2026-08-24. |
+
 Expected:
 
 - Tablet pings `192.168.0.84`.
 - Chrome opens the Factory Terminal.
 - Android reports `mLockTaskModeState=PINNED`.
+- `adb_allowed_connection_time=0`.
+- `adb_enabled=1`.
+- `adb_wifi_enabled=1`.
+- `development_settings_enabled=1`.
 - `stay_on_while_plugged_in=3`.
 - `wifi_sleep_policy=2`.
+- `screen_off_timeout=2147483647`.
+- `screensaver_enabled=0`.
+- `accelerometer_rotation=0`.
+- `user_rotation=0`.
+- Optional dashboard-only cleanup disables weather, launcher/search tips, video,
+  music, maps, mail/calendar/keep, Android Auto, and the OTA updater for the
+  current Android user via reversible `pm disable-user --user 0`.
+
+Avoid enabling risky/noisy developer options for floor testing: OEM unlocking,
+mock locations, show taps, pointer location, strict mode, GPU debugging, and
+`Don't keep activities` should stay off.
+
+The wallpaper image is copied to `/sdcard/Pictures/anglo-factory-wallpaper.jpg`.
+This HTC build does not expose a silent ADB wallpaper setter, so setting it as
+the visible launcher wallpaper may still need one manual Android wallpaper
+confirmation on each new tablet.
 
 ### 4. Add a home-screen shortcut once
 
 If the shortcut is missing on a new tablet:
 
-1. Open the desired Factory Terminal URL in Chrome.
+1. Open the desired cover URL in Chrome: `http://192.168.0.84:3300/cover.html?station=<N>`.
 2. Tap Chrome menu: three dots.
 3. Tap `Add to Home screen`.
-4. Name it `Factory Terminal — Anglo Windows`.
-5. Confirm it appears on the launcher.
+4. Keep the station name Chrome suggests, for example `Station 5`.
+5. Tap Chrome's `Add`, then Android launcher's `Add to home screen`.
+6. Confirm the station-labelled shortcut appears on the launcher.
 
 This is the recovery button for staff if Chrome is closed or the tablet is
 restarted.
+
+The station shortcuts must open the charging cover page directly:
+
+| Shortcut label | Opens |
+|---|---|
+| `Station 4` | `http://192.168.0.84:3300/cover.html?station=4` |
+| `Station 5` | `http://192.168.0.84:3300/cover.html?station=5` |
+| `Station 6` | `http://192.168.0.84:3300/cover.html?station=6` |
+| `Station 8` | `http://192.168.0.84:3300/cover.html?station=8` |
+
+If Chrome's address bar is visible after using the shortcut, tap anywhere on
+the cover once. The page requests fullscreen, then `Start Normal Operation`
+opens the normal station dashboard without asking the operator for a password.
+`Admin / Normal Tablet Mode` is the password-protected route back to Android
+home.
+
+The app now serves a web manifest and black/yellow `AW TERMINAL` icons, so
+newly created Chrome home-screen shortcuts use the branded station shortcut
+icon instead of Chrome's default blank page icon. Existing generic shortcuts
+may need to be removed and recreated once for the new icon and station-specific
+cover URL to appear.
+
+## One-shot prompt for the next charging tablets
+
+Use this prompt in a fresh Codex/local ADB task when Stations 5, 6, and the
+next tablet are plugged in:
+
+```text
+Start in the shared Anglo protocol, then use only the canonical anglo-planner
+repo at C:\Users\angusm\CLAUDE MASTER\anglo-planner.
+
+Goal: one-shot the next factory tablets over USB ADB using the existing rollout
+script. Do not change app business logic or Sheet bridge code.
+
+1. Run adb devices -l and identify the newly connected HTC AT01 serials.
+2. Verify http://127.0.0.1:3300/manifest.webmanifest returns HTTP 200 and the
+   live server is still reachable.
+3. For each new serial, run:
+   .\tools\setup-factory-tablet.ps1 -Serial <SERIAL> -Station <N> -DeviceLabel "<LABEL>" -WallpaperPath "C:\Users\angusm\CLAUDE MASTER\anglo-planner\design-export\assets\anglo-factory-wallpaper-from-tablet1.jpg" -CleanDashboardOnly
+4. Assign:
+   - Station 5: label "Station 5 - SAW 2"
+   - Station 6: label "Station 6 - ASSEMBLY"
+5. Handle Chrome first-run prompts locally: continue without sync/notifications,
+   reopen the station URL, tap LOCK FULLSCREEN, dismiss the Android fullscreen
+   education panel if shown, and confirm mLockTaskModeState=PINNED.
+6. Create or recreate the Chrome home-screen shortcut manually once per tablet
+   so it receives the new AW TERMINAL manifest icon.
+7. Take screenshots and report serial, station, label, disabled-package proof,
+   wallpaper-file proof, and lock-task state.
+```
 
 ## Field verification
 

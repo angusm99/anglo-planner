@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Factory Terminal Cover</title>
+<script>
+  const coverStation = new URLSearchParams(location.search).get("station");
+  if (/^(4|5|6|8)$/.test(coverStation || "")) {
+    document.write(`<link rel="manifest" href="/manifest-station-${coverStation}.webmanifest">`);
+  } else {
+    document.write('<link rel="manifest" href="/manifest.webmanifest">');
+  }
+</script>
+<link rel="icon" sizes="192x192" href="/icons/factory-terminal-192.png">
+<link rel="stylesheet" href="/fonts/lexend.css">
+<meta name="theme-color" content="#f6c945">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body, button { -webkit-user-select: none; user-select: none; }
+  body {
+    color: #f6c945;
+    font-family: Lexend, Arial, sans-serif;
+    background: #090806 url("/cover-wallpaper.jpg") center / cover no-repeat;
+    overflow: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,.32), rgba(0,0,0,.78));
+  }
+  main {
+    position: relative;
+    z-index: 1;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 36px 20px 32px;
+    text-align: center;
+  }
+  .top {
+    width: min(88vw, 580px);
+    padding: 12px 16px;
+    border: 1px solid rgba(246,201,69,.42);
+    border-radius: 8px;
+    background: rgba(0,0,0,.58);
+    color: #e7ddb2;
+    font: 800 18px Lexend, Arial, sans-serif;
+    letter-spacing: .06em;
+  }
+  .badge {
+    width: min(88vw, 600px);
+    padding: 26px 18px;
+    border: 4px solid #f6c945;
+    border-radius: 12px;
+    background: rgba(0,0,0,.74);
+    box-shadow: 0 0 38px rgba(246,201,69,.28);
+  }
+  .station {
+    color: #f6c945;
+    font-family: Lexend, Arial, sans-serif;
+    font-size: clamp(46px, 10vw, 98px);
+    font-weight: 900;
+    line-height: .92;
+    letter-spacing: 0;
+    text-shadow: 0 3px 0 #000;
+  }
+  .name {
+    margin-top: 16px;
+    color: #fff;
+    font-family: Lexend, Arial, sans-serif;
+    font-size: clamp(36px, 9vw, 82px);
+    font-weight: 900;
+    line-height: .98;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    text-shadow: 0 4px 0 #000;
+  }
+  .subname {
+    margin-top: 18px;
+    color: #f6c945;
+    font: 800 clamp(18px, 4vw, 34px) Lexend, Arial, sans-serif;
+    letter-spacing: .04em;
+  }
+  .actions { width: min(88vw, 600px); display: grid; gap: 12px; }
+  button {
+    width: 100%;
+    min-height: 78px;
+    border: 0;
+    border-radius: 8px;
+    background: #f6c945;
+    color: #090806;
+    font: 900 27px Lexend, Arial, sans-serif;
+    letter-spacing: 0;
+  }
+  button:active { transform: scale(.98); background: #fff; }
+  .admin {
+    min-height: 50px;
+    border: 1px solid rgba(246,201,69,.5);
+    background: rgba(0,0,0,.64);
+    color: #f6c945;
+    font-size: 16px;
+  }
+  .message {
+    min-height: 44px;
+    color: #ffcac6;
+    font: 800 16px Consolas, monospace;
+    line-height: 1.35;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">CHARGING COVER - TAP SCREEN FOR FULLSCREEN</div>
+  <section class="badge">
+    <div id="station" class="station">?</div>
+    <div id="name" class="name">Station</div>
+    <div id="subname" class="subname"></div>
+  </section>
+  <section class="actions">
+    <div id="message" class="message"></div>
+    <button id="start" type="button">START NORMAL OPERATION</button>
+    <button id="admin" class="admin" type="button">ADMIN / NORMAL TABLET MODE</button>
+  </section>
+</main>
+<script>
+const STATION_COVERS = {
+  4: { name: "SAW-1" },
+  5: { name: "SAW-2" },
+  6: { name: "ASSEMBLY" },
+  8: { name: "BEAD SAW" },
+};
+const params = new URLSearchParams(location.search);
+const station = Number(params.get("station") || 0);
+const cover = STATION_COVERS[station] || { name: "UNKNOWN", operator: "Check label" };
+const target = `/station/${station}`;
+
+try {
+  if (STATION_COVERS[station]) {
+    localStorage.setItem("factoryCoverStation", String(station));
+    document.cookie = `factoryCoverStation=${station}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }
+} catch (_) {}
+
+document.getElementById("station").textContent = station ? `STATION-${station}` : "STATION-?";
+document.getElementById("name").textContent = cover.name;
+document.getElementById("subname").textContent = "FACTORY TERMINAL";
+document.getElementById("start").addEventListener("click", () => {
+  if (station) location.href = target;
+});
+
+async function enterFullscreen() {
+  if (document.fullscreenElement) return;
+  try {
+    await document.documentElement.requestFullscreen();
+  } catch (_) {
+    document.getElementById("message").textContent = "Tap again if the browser bar is still visible";
+  }
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("button")) return;
+  enterFullscreen();
+});
+
+function cyrb53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
+document.getElementById("admin").addEventListener("click", async () => {
+  const message = document.getElementById("message");
+  const entered = prompt("Admin password");
+  if (entered === null) return;
+  const passwordHash = cyrb53(entered);
+  if (passwordHash !== 6454293043924497) {
+    message.textContent = "Wrong password";
+    return;
+  }
+  message.textContent = "Opening Android home...";
+  try {
+    const response = await fetch("/api/tablet/admin-home", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ station, passwordHash }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) throw new Error(result.error || "Admin unlock failed");
+    message.textContent = "Admin mode opened";
+  } catch (err) {
+    message.textContent = String(err.message || err);
+  }
+});
+</script>
+</body>
+</html>

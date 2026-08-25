@@ -1,0 +1,25 @@
+{
+  "name": "Station 6 - Assembly",
+  "short_name": "Station 6",
+  "id": "/cover.html?station=6",
+  "description": "Anglo Windows Factory Terminal Station 6 cover",
+  "start_url": "/cover.html?station=6",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0b09",
+  "theme_color": "#f6c945",
+  "icons": [
+    {
+      "src": "/icons/factory-terminal-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/factory-terminal-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
