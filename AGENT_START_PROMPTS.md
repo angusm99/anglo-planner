@@ -12,7 +12,10 @@ changes.
 - Canonical repo: `C:\Users\angusm\CLAUDE MASTER\anglo-planner`
 - GitHub: `https://github.com/angusm99/anglo-planner`
 - Branch: `master`
-- Latest pushed app commit at this handoff: `1c00aba` (`Bound Sheet bridge request time`)
+- Live-tested runtime baseline: `1c00aba` (`Bound Sheet bridge request time`)
+- Before changing anything, run `git log -1 --oneline` and confirm the checkout
+  matches `origin/master`; the handoff and rollout safeguards were added after
+  the runtime baseline
 - Live tablet URL: `http://192.168.0.84:3300/`
 - Station 4 / Saw 1: HTC AT01, serial `FS44BPC01070`
 - Station 5 / Saw 2: HTC AT01, serial `FS44BPC00401`
@@ -80,9 +83,11 @@ Branch:
 
 master
 
-Latest pushed commit at handoff:
+Live-tested runtime baseline:
 
 1c00aba
+
+Before changing anything, verify the current origin/master HEAD with git log.
 
 Read these before advising or changing anything:
 
@@ -137,9 +142,11 @@ Branch:
 
 master
 
-Latest pushed commit at handoff:
+Live-tested runtime baseline:
 
 1c00aba
+
+Before changing anything, verify the current origin/master HEAD with git log.
 
 Read in order:
 
