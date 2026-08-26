@@ -159,6 +159,41 @@ Expected:
   music, maps, mail/calendar/keep, Android Auto, and the OTA updater for the
   current Android user via reversible `pm disable-user --user 0`.
 
+### Google app safety boundary
+
+The Factory Terminal depends on these Android components and they must remain
+enabled: Chrome (`com.android.chrome`), Android System WebView
+(`com.google.android.webview`), Google Play Services (`com.google.android.gms`),
+Google Services Framework (`com.google.android.gsf`), and the Android launcher
+(`com.android.launcher3`). Disabling any of these can break the dashboard,
+Chrome rendering, network services, or the administrator home screen.
+
+Google Photos (`com.google.android.apps.photos`) is not required while the
+dashboard is running, but it is the only working image-picker route found on
+these HTC tablets. If Photos is disabled, the HTC Wallpaper & Style screen can
+crash when choosing a local wallpaper. Re-enable Photos before changing a
+wallpaper:
+
+```powershell
+adb -s <SERIAL> shell pm enable --user 0 com.google.android.apps.photos
+```
+
+Google Play Store (`com.android.vending`) is not required for daily Factory
+Terminal operation. Disabling it also stops normal Play Store updates for
+Chrome and WebView, so temporarily re-enable it during planned tablet
+maintenance, update Chrome/WebView, then disable it again only if the clean
+floor interface still requires that:
+
+```powershell
+adb -s <SERIAL> shell pm enable --user 0 com.android.vending
+```
+
+Read-only audit on 2026-08-26: all four station tablets had Chrome, WebView,
+Play Services, Services Framework, and the launcher enabled. Photos was
+disabled on all four. Play Store was disabled on Stations 4, 6, and 8 and
+enabled on Station 5. This state is safe for the current floor test; wallpaper
+changes and browser-update maintenance are the only known limitations.
+
 Avoid enabling risky/noisy developer options for floor testing: OEM unlocking,
 mock locations, show taps, pointer location, strict mode, GPU debugging, and
 `Don't keep activities` should stay off.

@@ -113,7 +113,6 @@ if ($CleanDashboardOnly) {
     "com.google.android.apps.books",
     "com.google.android.apps.docs",
     "com.google.android.apps.maps",
-    "com.google.android.apps.photos",
     "com.google.android.apps.tachyon",
     "com.google.android.apps.youtube.music",
     "com.google.android.apps.youtube.kids",
