@@ -15,6 +15,22 @@ if (-not $WebAppUrl) {
   $WebAppUrl = Read-Host "Paste FACTORY TERMINAL Web App /exec URL"
 }
 
+# Chat apps can copy a displayed link as [url](url). Accept that form, but
+# validate the result before stopping the currently running terminal server.
+if ($WebAppUrl -match '^\[(https://[^\]]+)\]\(https://[^\)]+\)$') {
+  $WebAppUrl = $Matches[1]
+  Write-Host "Removed copied Markdown link formatting." -ForegroundColor DarkYellow
+}
+
+$parsedWebAppUrl = $null
+$validWebAppUrl = [Uri]::TryCreate($WebAppUrl, [UriKind]::Absolute, [ref]$parsedWebAppUrl) -and
+  $parsedWebAppUrl.Scheme -eq "https" -and
+  $parsedWebAppUrl.Host -eq "script.google.com" -and
+  $parsedWebAppUrl.AbsolutePath.EndsWith("/exec")
+if (-not $validWebAppUrl) {
+  throw "WebAppUrl must be the raw https://script.google.com/.../exec address. Do not include Markdown brackets or link text."
+}
+
 Write-Host "Web app URL:" -ForegroundColor Cyan
 Write-Host $WebAppUrl
 Write-Host ""

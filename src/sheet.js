@@ -11,6 +11,10 @@ const https = require("node:https");
 
 const URL_STR = process.env.SHEET_WEBAPP_URL || "";
 const TOKEN = process.env.SHEET_TOKEN || "";
+const configuredTimeout = Number(process.env.SHEET_REQUEST_TIMEOUT_MS);
+const REQUEST_TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+  ? configuredTimeout
+  : 15000;
 
 // The only fields that exist as columns in the sheet (see tools/sheet-writeback.gs).
 const PUSHABLE = new Set(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "job_status"]);
@@ -55,43 +59,61 @@ function buildRepickDonePayload(job, issue) {
   };
 }
 
-function post(urlStr, data) {
+function requestText(target, options = {}, body = null) {
   return new Promise((resolve, reject) => {
-    const body = Buffer.from(JSON.stringify(data));
-    const req = https.request(new URL(urlStr), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Content-Length": body.length },
-    }, (res) => {
-      // GAS web apps answer a POST with a 302 to googleusercontent.com; follow it once.
-      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-        res.resume();
-        https.get(res.headers.location, (r2) => {
-          let b = ""; r2.on("data", (c) => (b += c)); r2.on("end", () => resolve({ status: r2.statusCode, body: b }));
-        }).on("error", reject);
-        return;
-      }
-      let b = ""; res.on("data", (c) => (b += c)); res.on("end", () => resolve({ status: res.statusCode, body: b }));
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    };
+    const req = https.request(target, options, (res) => {
+      let responseBody = "";
+      res.on("data", (chunk) => (responseBody += chunk));
+      res.on("end", () => finish(resolve, {
+        status: res.statusCode,
+        headers: res.headers,
+        body: responseBody,
+      }));
+      res.on("error", (err) => finish(reject, err));
     });
-    req.on("error", reject);
-    req.write(body);
+    const timer = setTimeout(() => {
+      req.destroy(new Error(`Sheet request timed out after ${REQUEST_TIMEOUT_MS} ms`));
+    }, REQUEST_TIMEOUT_MS);
+    req.on("error", (err) => finish(reject, err));
+    if (body) req.write(body);
     req.end();
   });
 }
 
-function get(params) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(URL_STR);
-    u.searchParams.set("token", TOKEN);
-    for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-    const go = (target, hops) => https.get(target, (res) => {
-      if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && hops < 2) {
-        res.resume();
-        return go(res.headers.location, hops + 1);
-      }
-      let b = ""; res.on("data", (c) => (b += c)); res.on("end", () => resolve(b));
-    }).on("error", reject);
-    go(u, 0);
-  });
+async function post(urlStr, data) {
+  const body = Buffer.from(JSON.stringify(data));
+  const response = await requestText(new URL(urlStr), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": body.length },
+  }, body);
+  // GAS web apps answer a POST with a redirect to googleusercontent.com.
+  if ((response.status === 301 || response.status === 302) && response.headers.location) {
+    return requestText(response.headers.location);
+  }
+  return response;
+}
+
+async function get(params) {
+  const u = new URL(URL_STR);
+  u.searchParams.set("token", TOKEN);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  let target = u;
+  for (let hops = 0; hops <= 2; hops++) {
+    const response = await requestText(target);
+    if ((response.status === 301 || response.status === 302) && response.headers.location && hops < 2) {
+      target = response.headers.location;
+      continue;
+    }
+    return response.body;
+  }
+  return "";
 }
 
 // Live read from the sheet. Returns [] on any failure so lookups never break.
