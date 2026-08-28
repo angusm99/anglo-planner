@@ -36,10 +36,10 @@ test("Station 8 (Bead Saw) REDO writes REPICK only, never touches Job Status", (
   assert.ok(!("job_status" in changes));
 });
 
-test("cleanRedoInput accepts Station 8 with a default actor of Kerabo", () => {
+test("cleanRedoInput accepts Station 8 with a default actor of Tebello", () => {
   const input = cleanRedoInput({ jobId: 5, station: 8, unit: "D1", issue: "Bead scratched" });
   assert.strictEqual(input.station, 8);
-  assert.strictEqual(input.actor, "Kerabo");
+  assert.strictEqual(input.actor, "Tebello");
 });
 
 test("completion uses numbered REDONE", () => {

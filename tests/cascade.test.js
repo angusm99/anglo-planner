@@ -104,7 +104,7 @@ test("S7 completion statuses still trigger the glass cascade", () => {
 test("S8 exposes exactly the approved Bead Saw choices, including REDO", () => {
   assert.deepStrictEqual(STATIONS[8].buttons, ["DONE", "BEAD SHORT", "NOT PICKED", "REDO"]);
   assert.strictEqual(STATIONS[8].key, "job_status");
-  assert.strictEqual(STATIONS[8].responsible, "Kerabo");
+  assert.strictEqual(STATIONS[8].responsible, "Tebello");
 });
 
 test("S8 REDO is flagged and never touches Job Status, same as every other station", () => {

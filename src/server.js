@@ -7,6 +7,8 @@ const { execFile } = require("node:child_process");
 const { open } = require("./db");
 const { STATIONS, applyCascade, norm } = require("./cascade");
 const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
+const { stationLog } = require("./stationLog");
+const { managerSummary } = require("./managerSummary");
 const {
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
   fetchSheetJobs, fetchSheetCapabilities, sheetEnabled,
@@ -504,6 +506,13 @@ const server = http.createServer(async (req, res) => {
       const rows = listIssues(url.searchParams.get("ref"));
       return rows === null ? json(res, 400, { error: "ref required" }) : json(res, 200, rows);
     }
+    if (p === "/api/station-log") {
+      const result = stationLog(db, url.searchParams.get("station"), url.searchParams.get("days"));
+      return json(res, result.error ? 400 : 200, result);
+    }
+    if (p === "/api/manager-summary" && req.method === "GET") {
+      return json(res, 200, managerSummary(db, { days: url.searchParams.get("days") }));
+    }
     if (p === "/api/redo/complete" && req.method === "POST") {
       const result = await completeRepick(await readBody(req));
       return json(res, result.error ? 400 : 200, result);
@@ -537,7 +546,9 @@ const server = http.createServer(async (req, res) => {
     let file = p === "/" ? "/index.html" : p;
     if (/^\/station\/\d+$/.test(p)) file = "/station.html";
     if (p === "/dashboard") file = "/dashboard.html";
+    if (p === "/manager" || p === "/control") file = "/manager.html";
     if (p === "/office") file = "/office.html";
+    if (p === "/station-log") file = "/station-log.html";
     const full = path.join(PUBLIC_DIR, path.normalize(file));
     if (!full.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
       res.writeHead(404, { "Content-Type": "text/plain" });

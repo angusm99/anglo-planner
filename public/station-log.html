@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Station log — Anglo planner</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" sizes="192x192" href="/icons/factory-terminal-192.png">
+<meta name="theme-color" content="#f6c945">
+<script>document.documentElement.dataset.theme = localStorage.getItem("anglo-theme") || "dark";</script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>Station log</h1>
+      <div class="sub">Every confirmed tap, by station — who, what, when</div>
+    </div>
+  </div>
+  <div class="right">
+    <button class="theme" onclick="location.href='/?select=1'">← Home</button>
+    <button class="theme" onclick="location.href='/dashboard'">Dashboard</button>
+    <button class="theme" onclick="location.href='/office'">Office</button>
+    <button class="theme" id="themeBtn" onclick="toggleTheme(this)"></button>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+<main style="max-width:1280px;">
+
+  <div class="card" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <label class="field" style="min-width:200px;">Station
+      <select id="station"></select>
+    </label>
+    <label class="field" style="min-width:140px;">Range
+      <select id="days">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </label>
+    <span id="summary" style="color:var(--muted); font-size:13px;"></span>
+  </div>
+
+  <div class="card" style="padding:10px 16px 16px;">
+    <table class="jobs">
+      <thead>
+        <tr>
+          <th style="width:140px;">When</th>
+          <th style="width:120px;">Operator</th>
+          <th>Job</th>
+          <th style="width:110px;">Field</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="empty" style="display:none; padding:20px; color:var(--muted);">No activity in range for this station.</p>
+  </div>
+</main>
+
+<script src="/common.js"></script>
+<script>
+startClock(document.getElementById("clock"));
+document.getElementById("themeBtn").textContent = themeButtonLabel();
+
+const stationSel = document.getElementById("station");
+const daysSel = document.getElementById("days");
+
+fetch("/api/stations").then(r => r.json()).then(stations => {
+  stationSel.innerHTML = Object.entries(stations)
+    .map(([num, st]) => `<option value="${num}">Station ${num} — ${esc(st.name)}</option>`)
+    .join("");
+  const wanted = new URLSearchParams(location.search).get("station");
+  if (wanted && stations[wanted]) stationSel.value = wanted;
+  refresh();
+});
+
+stationSel.addEventListener("change", refresh);
+daysSel.addEventListener("change", refresh);
+
+async function refresh() {
+  const station = stationSel.value;
+  const days = daysSel.value;
+  if (!station) return;
+  const result = await fetch(`/api/station-log?station=${station}&days=${days}`).then(r => r.json());
+  const rows = result.rows || [];
+
+  document.getElementById("summary").textContent = result.station
+    ? `${result.station.responsible} — ${rows.length} action${rows.length === 1 ? "" : "s"} in the last ${result.days} days`
+    : "";
+
+  document.getElementById("rows").innerHTML = rows.map(r => `
+    <tr>
+      <td>${fmtWhen(r.created_at)}</td>
+      <td>${esc(r.actor || "—")}</td>
+      <td>${esc(r.biz_ref || r.task_no || "")} — ${esc(r.customer || "")}</td>
+      <td>${esc(r.field)}</td>
+      <td>${esc(r.old_value || "—")} → <strong>${esc(r.new_value || "—")}</strong></td>
+    </tr>`).join("");
+  document.getElementById("empty").style.display = rows.length ? "none" : "block";
+}
+
+function fmtWhen(iso) {
+  // SQLite gives "YYYY-MM-DD HH:MM:SS" in local time already.
+  const [d, t] = String(iso || "").split(" ");
+  return d && t ? `${d} ${t.slice(0, 5)}` : (iso || "");
+}
+</script>
+</body>
+</html>

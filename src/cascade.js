@@ -16,7 +16,7 @@ const STATIONS = {
   5: { key: "s5", name: "Saw 2",             responsible: "Richard",         defaultStatus: "DONE",     buttons: ["QUEUED", "DONE", "0", "REDO", "SCHEDULED", "JOB PICKED", "W.I.P", "DEFECT-M", "DONE-NO PW", "PICK SHORT", "PICK TROLLEY"] },
   6: { key: "s6", name: "Assembly",          responsible: "Portia",          defaultStatus: "ALL DONE", buttons: ["QUEUED", "ALL DONE", "0", "SCHEDULED", "JOB PICKED", "W.I.P", "DONE-NO PW", "WINDOWS DONE", "S-FRONT DONE", "SLIDERS DONE", "REDO"] },
   7: { key: "s7", name: "Glass dept",        responsible: "Thabatso/Vierra", defaultStatus: "DONE",     buttons: ["QUEUE OUT", "QUEUE IN", "DONE", "REDO", "0", "W.I.P", "ORDER DUE", "DONE-NO PW", "SCHEDULED", "FRAMELESS", "CNC-DG READY", "SLATTED UNITS", "DELIVERED", "FRAMES ONLY"] },
-  8: { key: "job_status", name: "Bead saw",  responsible: "Kerabo",          defaultStatus: "DONE",     buttons: ["DONE", "BEAD SHORT", "NOT PICKED", "REDO"] },
+  8: { key: "job_status", name: "Bead saw",  responsible: "Tebello",         defaultStatus: "DONE",     buttons: ["DONE", "BEAD SHORT", "NOT PICKED", "REDO"] },
 };
 
 const REDO_VALUE = "REDO";

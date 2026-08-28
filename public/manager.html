@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Factory Control — Anglo Windows</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" sizes="192x192" href="/icons/factory-terminal-192.png">
+<meta name="theme-color" content="#090a0b">
+<link rel="stylesheet" href="/fonts/lexend.css">
+<link rel="stylesheet" href="/manager.css">
+</head>
+<body class="manager-body">
+<div class="manager-shell">
+  <aside class="manager-rail" aria-label="Manager navigation">
+    <div class="manager-monogram" aria-label="Anglo Windows">AW</div>
+    <nav class="manager-nav">
+      <button class="manager-nav-button active" type="button" data-view="today" aria-label="Today">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h7V3H3v9Zm11 9h7V12h-7v9ZM3 21h7v-5H3v5Zm11-13h7V3h-7v5Z"/></svg>
+        <span>Today</span>
+      </button>
+      <button class="manager-nav-button" type="button" data-view="flow" aria-label="Job flow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h7m2 0h7M4 12h4m2 0h10M4 18h10m2 0h4"/><circle cx="12" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+        <span>Flow</span>
+      </button>
+      <button class="manager-nav-button" type="button" data-view="attention" aria-label="Attention jobs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>
+        <span>Attention</span>
+      </button>
+      <button class="manager-nav-button" type="button" data-view="activity" aria-label="Activity">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19V9m5 10V5m6 14v-7m5 7V3"/></svg>
+        <span>Activity</span>
+      </button>
+    </nav>
+    <div class="manager-readonly">Read-only control terminal</div>
+  </aside>
+
+  <main class="manager-main">
+    <header class="manager-header">
+      <div class="manager-title-wrap">
+        <img class="manager-logo" src="/anglo-logo.png" alt="Anglo Windows">
+        <div class="manager-title-rule" aria-hidden="true"></div>
+        <div>
+          <p class="manager-eyebrow">Factory Manager Control</p>
+          <h1 class="manager-title">Operations Command Centre</h1>
+        </div>
+      </div>
+      <div class="manager-header-tools">
+        <div class="manager-connection" id="managerConnection"><span class="manager-connection-dot"></span><span id="managerConnectionText">Connecting</span></div>
+        <div class="manager-updated" id="managerUpdated">Waiting for data</div>
+        <button class="manager-icon-button" id="managerRefresh" type="button" title="Refresh dashboard" aria-label="Refresh dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7.5 7.5 0 1 0 .2 3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="managerContent" class="manager-loading" aria-live="polite">
+      <div><div class="manager-loading-ring"></div>Loading confirmed factory activity…</div>
+    </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+const MANAGER_BLOCKER_LABELS = {
+  "RC-X": "Planning change",
+  "Changes required": "Changes required",
+  "Order due": "Glass order due",
+  "Not picked": "Beads not picked",
+};
+
+let managerSummaryData = null;
+let managerView = "today";
+let managerRefreshTimer = null;
+let managerSse = null;
+
+const $ = (id) => document.getElementById(id);
+
+function escapeManager(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
+}
+
+function managerDate(iso) {
+  if (!iso) return "No install date";
+  const date = new Date(`${iso}T00:00:00`);
+  return date.toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
+}
+
+function managerTime(value) {
+  if (!value) return "No activity";
+  const date = new Date(String(value).replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return "No activity";
+  return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
+}
+
+function managerAge(minutes, emptyLabel = "No confirmed update") {
+  if (minutes == null) return emptyLabel;
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours < 24) return `${hours}h${mins ? ` ${mins}m` : ""} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h ago`;
+}
+
+function horizonLabel(value) {
+  return ({ overdue: "Overdue", today: "Today", next48h: "Next 48h", upcoming: "Upcoming", later: "Later" })[value] || "Unscheduled";
+}
+
+function blockerLabel(blocker) {
+  if (!blocker) return "";
+  return MANAGER_BLOCKER_LABELS[blocker.reason] || blocker.reason;
+}
+
+function setManagerConnection(connected, text) {
+  const status = $("managerConnection");
+  status.classList.toggle("is-down", !connected);
+  $("managerConnectionText").textContent = text;
+}
+
+function kpi(label, value, state = "", suffix = "") {
+  return `<article class="manager-kpi ${state}"><p class="manager-kpi-label">${escapeManager(label)}</p><p class="manager-kpi-value">${escapeManager(value)}${suffix ? `<span class="manager-kpi-suffix">${escapeManager(suffix)}</span>` : ""}</p></article>`;
+}
+
+function panelHeader(title, subtitle, badge, badgeClass = "") {
+  return `<header class="manager-panel-header"><div><h2 class="manager-panel-title">${escapeManager(title)}</h2><p class="manager-panel-subtitle">${escapeManager(subtitle)}</p></div>${badge ? `<span class="manager-badge ${badgeClass}">${escapeManager(badge)}</span>` : ""}</header>`;
+}
+
+function renderStations(data) {
+  const maxLoad = Math.max(1, ...data.stations.map((station) => station.load));
+  return data.stations.map((station) => {
+    const width = Math.round((station.load / maxLoad) * 100);
+    const alert = station.attention ? `<span class="manager-station-alert">${station.attention} attention</span>` : `<span>${station.inProgress} active</span>`;
+    return `<article class="manager-station">
+      <div class="manager-station-number">Station ${station.number}</div>
+      <div class="manager-station-name">${escapeManager(station.name)}</div>
+      <div class="manager-station-count">${station.load}</div>
+      <div class="manager-station-meta"><span>${station.queue} queued</span>${alert}</div>
+      <div class="manager-station-bar"><span style="width:${width}%"></span></div>
+    </article>`;
+  }).join("");
+}
+
+function renderPriorityJobs(data, limit = 8) {
+  const jobs = data.priorityJobs.slice(0, limit);
+  if (!jobs.length) return `<div class="manager-empty">No jobs currently match the attention rules.<br>The dashboard remains read-only and will refresh from confirmed events.</div>`;
+  return jobs.map((job) => {
+    const firstBlocker = job.blockers[0];
+    const reason = firstBlocker ? `${firstBlocker.station}: ${blockerLabel(firstBlocker)}` : job.openIssues ? `${job.openIssues} open REDO / REPICK issue${job.openIssues === 1 ? "" : "s"}` : `${horizonLabel(job.horizon)} and not ready`;
+    const ageClass = job.freshness.state === "red" ? "red" : job.freshness.state === "amber" ? "amber" : "";
+    return `<article class="manager-job">
+      <div>
+        <div class="manager-job-top"><span class="manager-job-ref">${escapeManager(job.bizRef)}</span><span class="manager-job-customer">${escapeManager(job.customer || "No customer")}</span></div>
+        <div class="manager-job-meta">
+          <span class="manager-badge ${job.blocked ? "red" : job.atRisk ? "amber" : "yellow"}">${job.blocked ? "Blocked" : "At risk"}</span>
+          <span>${escapeManager(managerDate(job.installDate))}</span>
+          <span>${escapeManager(job.jobStatus || "No job status")}</span>
+        </div>
+        <div class="manager-job-reason">${escapeManager(reason)}</div>
+      </div>
+      <div class="manager-job-age ${ageClass}"><span>Last operator event</span><strong>${escapeManager(managerAge(job.freshness.ageMinutes))}</strong></div>
+    </article>`;
+  }).join("");
+}
+
+function renderRecentActivity(data, limit = 7) {
+  const events = data.recentUpdates.slice(0, limit);
+  if (!events.length) return `<div class="manager-empty">No confirmed station events are available in this local cache yet.</div>`;
+  return events.map((event) => `<article class="manager-activity">
+    <span class="manager-activity-dot"></span>
+    <div>
+      <div class="manager-activity-top"><span class="manager-activity-title">Station ${escapeManager(event.station || "—")} · ${escapeManager(event.actor || "Operator")}</span><span class="manager-activity-customer">${escapeManager(event.biz_ref || event.task_no || "—")} · ${escapeManager(event.customer || "")}</span></div>
+      <div class="manager-activity-change">${escapeManager(event.field)}: ${escapeManager(event.old_value || "—")} → ${escapeManager(event.new_value || "—")}</div>
+    </div>
+    <time class="manager-activity-time">${escapeManager(managerTime(event.created_at))}</time>
+  </article>`).join("");
+}
+
+function percent(value, total) {
+  return total ? Math.max(0, Math.min(100, (value / total) * 100)) : 0;
+}
+
+function renderFreshness(data) {
+  const total = data.metrics.activeJobs;
+  const f = data.freshness;
+  return `<div class="manager-freshness">
+    <div class="manager-freshness-bar" aria-label="Update freshness distribution">
+      <span class="fresh" style="width:${percent(f.fresh, total)}%"></span>
+      <span class="amber" style="width:${percent(f.amber, total)}%"></span>
+      <span class="red" style="width:${percent(f.red, total)}%"></span>
+      <span class="none" style="width:${percent(f.none, total)}%"></span>
+    </div>
+    <div class="manager-legend">
+      <div class="manager-legend-item fresh"><span>Under 90m</span><strong>${f.fresh}</strong></div>
+      <div class="manager-legend-item amber"><span>90m–4h</span><strong>${f.amber}</strong></div>
+      <div class="manager-legend-item red"><span>Over 4h</span><strong>${f.red}</strong></div>
+      <div class="manager-legend-item none"><span>No event</span><strong>${f.none}</strong></div>
+    </div>
+  </div>`;
+}
+
+function renderHorizon(data) {
+  const h = data.installHorizon;
+  return `<div class="manager-horizon">
+    <div class="manager-horizon-item danger"><div class="manager-horizon-label">Overdue</div><div class="manager-horizon-value">${h.overdue}</div></div>
+    <div class="manager-horizon-item warn"><div class="manager-horizon-label">Today</div><div class="manager-horizon-value">${h.today}</div></div>
+    <div class="manager-horizon-item"><div class="manager-horizon-label">Next 48h</div><div class="manager-horizon-value">${h.next48h}</div></div>
+    <div class="manager-horizon-item"><div class="manager-horizon-label">Upcoming</div><div class="manager-horizon-value">${h.upcoming}</div></div>
+  </div>`;
+}
+
+function renderQueuePlaceholder(data) {
+  return `<section class="manager-panel">
+    ${panelHeader("Manager Queue / Instructions", "Future instruction relay", "Not connected", "yellow")}
+    <div class="manager-queue">
+      <div class="manager-queue-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 4h16v12H7l-3 3V4Z"/><path d="M8 8h8m-8 4h5"/></svg> Read-only contract preview</div>
+      <p>Urgent flags, station queues, instructions and acknowledgements are intentionally unwired in v1. Future records will reference jobs.id and numeric station IDs; this screen cannot write to the Sheet or station tablets.</p>
+      <div class="manager-queue-actions"><button class="manager-disabled-button" type="button" disabled>New instruction</button><button class="manager-disabled-button" type="button" disabled>0 queued</button></div>
+    </div>
+  </section>`;
+}
+
+function renderToday(data) {
+  const m = data.metrics;
+  return `<div class="manager-view">
+    <section class="manager-kpis" aria-label="Factory overview">
+      ${kpi("Active jobs", m.activeJobs)}
+      ${kpi("At risk", m.atRiskJobs, m.atRiskJobs ? "is-risk" : "")}
+      ${kpi("Blocked", m.blockedJobs, m.blockedJobs ? "is-blocked" : "")}
+      ${kpi("Update health", m.updateHealthPercent, m.updateHealthPercent >= 75 ? "is-healthy" : "is-risk", "%")}
+      ${kpi("Ready", m.readyJobs, "is-healthy")}
+      ${kpi("Open issues", m.openIssues, m.openIssues ? "is-blocked" : "")}
+    </section>
+
+    <section class="manager-panel manager-flow-panel">
+      ${panelHeader("Production Flow", "Current non-complete load across the eight floor stations", `${data.stations.reduce((sum, station) => sum + station.load, 0)} station positions`, "yellow")}
+      <div class="manager-station-grid">${renderStations(data)}</div>
+    </section>
+
+    <div class="manager-grid" style="margin-top:11px;">
+      <section class="manager-panel">
+        ${panelHeader("Priority Jobs", "Blockers, install risk and overdue confirmed updates", `${m.attentionJobs} requiring attention`, m.attentionJobs ? "red" : "green")}
+        <div class="manager-attention-list">${renderPriorityJobs(data, 8)}</div>
+      </section>
+
+      <div class="manager-side-stack">
+        <section class="manager-panel">
+          ${panelHeader("Update Freshness", "Based only on confirmed events.created_at", `${m.updateHealthPercent}% healthy`, m.updateHealthPercent >= 75 ? "green" : "amber")}
+          ${renderFreshness(data)}
+        </section>
+        <section class="manager-panel">
+          ${panelHeader("Install Horizon", "Incomplete active jobs by install date", "Next 7 days")}
+          ${renderHorizon(data)}
+        </section>
+        ${renderQueuePlaceholder(data)}
+      </div>
+
+      <section class="manager-panel">
+        ${panelHeader("Recent Confirmed Updates", "Every row is a confirmed operator event", `${data.recentUpdates.length} loaded`, "green")}
+        <div class="manager-activity-list">${renderRecentActivity(data, 9)}</div>
+      </section>
+
+      <section class="manager-panel">
+        ${panelHeader("Last Activity by Station", "Operator event recency, not cache refresh time", "Live trail")}
+        <div class="manager-activity-list">${data.stations.map((station) => {
+          const stationAge = station.lastActivityAt ? Math.max(0, Math.floor((Date.now() - new Date(String(station.lastActivityAt).replace(" ", "T")).getTime()) / 60000)) : null;
+          return `<article class="manager-activity"><span class="manager-activity-dot" style="background:${stationAge == null || stationAge > 240 ? "var(--manager-red)" : stationAge > 90 ? "var(--manager-amber)" : "var(--manager-green)"}"></span><div><div class="manager-activity-title">Station ${station.number} · ${escapeManager(station.name)}</div><div class="manager-activity-change">${station.updatesToday} confirmed field change${station.updatesToday === 1 ? "" : "s"} today · ${escapeManager(station.responsible)}</div></div><time class="manager-activity-time">${escapeManager(station.lastActivityAt ? managerAge(stationAge) : "No event")}</time></article>`;
+        }).join("")}</div>
+      </section>
+    </div>
+  </div>`;
+}
+
+function renderFlow(data) {
+  return `<div class="manager-view"><section class="manager-kpis">${data.stations.slice(0, 6).map((station) => kpi(`Station ${station.number} · ${station.name}`, station.load, station.attention ? "is-blocked" : station.load ? "is-risk" : "is-healthy")).join("")}</section><section class="manager-panel">${panelHeader("Factory Flow Detail", "Queue, active work and attention state by station", "Read only", "yellow")}<div class="manager-station-grid">${renderStations(data)}</div></section><section class="manager-panel" style="margin-top:11px;">${panelHeader("Last Activity by Station", "Actual operator event age is always shown", "8 stations")}<div class="manager-activity-list">${data.stations.map((station) => `<article class="manager-activity"><span class="manager-activity-dot"></span><div><div class="manager-activity-title">Station ${station.number} · ${escapeManager(station.name)}</div><div class="manager-activity-change">${station.queue} queued · ${station.inProgress} active · ${station.attention} attention</div></div><time class="manager-activity-time">${escapeManager(station.lastActivityAt ? managerTime(station.lastActivityAt) : "No event")}</time></article>`).join("")}</div></section></div>`;
+}
+
+function renderAttention(data) {
+  return `<div class="manager-view"><section class="manager-kpis">${kpi("Requiring attention", data.metrics.attentionJobs, data.metrics.attentionJobs ? "is-blocked" : "is-healthy")}${kpi("Blocked", data.metrics.blockedJobs, data.metrics.blockedJobs ? "is-blocked" : "")}${kpi("At risk", data.metrics.atRiskJobs, data.metrics.atRiskJobs ? "is-risk" : "")}${kpi("Open issues", data.metrics.openIssues, data.metrics.openIssues ? "is-blocked" : "")}${kpi("Over 4 hours", data.freshness.red, data.freshness.red ? "is-blocked" : "")}${kpi("No event", data.freshness.none, data.freshness.none ? "is-risk" : "")}</section><section class="manager-panel">${panelHeader("Jobs Requiring Attention", "Ordered by blocker, install horizon and event freshness", `${data.metrics.attentionJobs} jobs`, data.metrics.attentionJobs ? "red" : "green")}<div class="manager-attention-list" style="max-height:none;">${renderPriorityJobs(data, 18)}</div></section></div>`;
+}
+
+function renderActivity(data) {
+  return `<div class="manager-view"><section class="manager-kpis">${kpi("Recent changes", data.recentUpdates.length)}${kpi("Under 90m", data.freshness.fresh, "is-healthy")}${kpi("90m–4h", data.freshness.amber, data.freshness.amber ? "is-risk" : "")}${kpi("Over 4h", data.freshness.red, data.freshness.red ? "is-blocked" : "")}${kpi("No event", data.freshness.none, data.freshness.none ? "is-risk" : "")}${kpi("Health", data.metrics.updateHealthPercent, data.metrics.updateHealthPercent >= 75 ? "is-healthy" : "is-risk", "%")}</section><div class="manager-grid"><section class="manager-panel">${panelHeader("Confirmed Operator Activity", "Newest confirmed field changes first", `${data.recentUpdates.length} loaded`, "green")}<div class="manager-activity-list" style="max-height:none;">${renderRecentActivity(data, 18)}</div></section><section class="manager-panel">${panelHeader("Freshness Distribution", "90-minute amber and four-hour red thresholds", "events.created_at")} ${renderFreshness(data)}</section></div></div>`;
+}
+
+function renderManager() {
+  if (!managerSummaryData) return;
+  const renderers = { today: renderToday, flow: renderFlow, attention: renderAttention, activity: renderActivity };
+  $("managerContent").className = "";
+  $("managerContent").innerHTML = renderers[managerView](managerSummaryData);
+}
+
+async function loadManagerData() {
+  $("managerRefresh").disabled = true;
+  try {
+    const response = await fetch("/api/manager-summary", { cache: "no-store" });
+    const body = await response.json();
+    if (!response.ok || body.error) throw new Error(body.error || "Could not load manager summary");
+    managerSummaryData = body;
+    const generated = new Date(body.generatedAt);
+    $("managerUpdated").textContent = `Data ${generated.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}`;
+    renderManager();
+  } catch (error) {
+    $("managerContent").className = "manager-loading";
+    $("managerContent").innerHTML = `<div class="manager-error"><strong>Manager data unavailable</strong><br><br>${escapeManager(error.message || "Check the local planner server and try again.")}</div>`;
+    setManagerConnection(false, "Server unavailable");
+  } finally {
+    $("managerRefresh").disabled = false;
+  }
+}
+
+document.querySelectorAll(".manager-nav-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    managerView = button.dataset.view;
+    document.querySelectorAll(".manager-nav-button").forEach((item) => item.classList.toggle("active", item === button));
+    renderManager();
+  });
+});
+
+$("managerRefresh").addEventListener("click", loadManagerData);
+
+function connectManagerStream() {
+  managerSse = new EventSource("/api/stream");
+  managerSse.onopen = () => setManagerConnection(true, "Live connection");
+  managerSse.onerror = () => setManagerConnection(false, "Reconnecting");
+  managerSse.addEventListener("job-updated", () => {
+    clearTimeout(managerRefreshTimer);
+    managerRefreshTimer = setTimeout(loadManagerData, 250);
+  });
+}
+
+loadManagerData();
+connectManagerStream();
+setInterval(loadManagerData, 60000);
+</script>
+</body>
+</html>
