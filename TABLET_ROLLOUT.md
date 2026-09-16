@@ -6,6 +6,45 @@ Last updated: 2026-08-21
 
 ## Purpose
 
+### Vendor updater repair — verified 2026-09-16
+
+On the HTC AT01, `com.jlinksz.update` is a persistent system app. Disabling it
+for user 0 leaves Android restarting it roughly every three seconds, with
+`SystemActionService` reported unavailable. Force-stop and reboot while merely
+disabled did not fix the loop on Saw 1.
+
+During an approved maintenance window, target the physical USB serial:
+
+```powershell
+adb -s <serial> shell pm uninstall -k --user 0 com.jlinksz.update
+Start-Sleep -Seconds 30
+adb -s <serial> reboot
+```
+
+This removes only the updater from user 0. `-k` keeps its data; the factory APK
+remains at `/product/app/FotaApp/FotaApp.apk`. Do not uninstall Chrome, WebView,
+Play Services or other system packages. `-CleanDashboardOnly` now uses this
+special handling for the updater; it does not reboot automatically.
+Allow Android time to persist the user-package state before rebooting: an
+immediate reboot restored the previous state during maintenance. Verify again
+after boot; `Success` from the uninstall command alone is insufficient.
+
+After boot and unlock, check `installed=false`, no updater PID and no new
+updater entries in the crash log. Reopen the station's correct cover and verify
+Wi-Fi HTTP access, charging and the station page. Recheck wireless debugging:
+its connection can be lost across reboot. Do not clear Chrome data or submit
+fake production updates as a health check.
+
+Rollback, only if intentionally restoring vendor update functionality:
+
+```powershell
+adb -s <serial> shell cmd package install-existing --user 0 com.jlinksz.update
+adb -s <serial> shell pm enable --user 0 com.jlinksz.update
+adb -s <serial> reboot
+```
+
+Restoring only to the disabled state can recreate the crash loop.
+
 Set up each HTC AT01 factory tablet so staff can open the Factory Terminal,
 keep the screen awake while powered, stay on Wi-Fi, and avoid drifting away
 from the live Material Planner screen.

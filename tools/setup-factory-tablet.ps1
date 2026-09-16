@@ -55,6 +55,20 @@ function Disable-OptionalPackage {
     return
   }
 
+  if ($PackageName -eq "com.jlinksz.update") {
+    # This vendor app is PERSISTENT. disable-user leaves it restarting with
+    # an unavailable SystemActionService, even after reboot (HTC AT01).
+    # Remove it only for user 0; -k retains data and the system APK remains.
+    # Restore with: adb -s <serial> shell cmd package install-existing --user 0 com.jlinksz.update
+    Write-Host "Removing persistent vendor updater from tablet user 0 (system APK retained)..." -ForegroundColor DarkGray
+    $result = Run-Adb @("shell", "pm", "uninstall", "-k", "--user", "0", $PackageName)
+    if ($LASTEXITCODE -ne 0 -or ($result -join "`n") -notmatch "(?m)^Success\s*$") {
+      throw "Could not remove vendor updater for user 0: $($result -join ' ')"
+    }
+    $result | Out-Host
+    return
+  }
+
   Write-Host "Disabling dashboard distraction: $PackageName" -ForegroundColor DarkGray
   Run-Adb @("shell", "pm", "disable-user", "--user", "0", $PackageName) | Out-Host
 }
