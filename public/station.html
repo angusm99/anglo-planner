@@ -59,6 +59,7 @@ button.big.redo-btn:active {
   </div>
 </header>
 <main>
+  <p id="connectionStatus" role="status" style="margin:0 0 12px;font-size:14px;">Checking Google Sheet...</p>
   <p id="terminalModeMessage" style="min-height:0;margin:0;color:var(--bad);font-size:12px;" aria-live="polite"></p>
   <section id="operatorView" class="card">
     <div class="aux-actions">
@@ -232,6 +233,7 @@ let pendingButton = null;
 let initialQueued = false;
 let redoReady = false;
 let sheetConnected = false;
+let currentSheetState = null;
 let repickIssues = [];
 let selectedRepick = null;
 let repickLoadToken = 0;
@@ -256,16 +258,15 @@ fetch("/api/stations").then(r => r.json()).then(all => {
   restoreOperatorHint();
 }).catch(() => { $("stWho").textContent = "Server unavailable"; });
 
-fetch("/api/capabilities").then(r => r.json()).then(value => {
-  sheetConnected = value.sheet === true;
-  redoReady = value.redo === true;
-  renderRedoAvailability();
-  renderSheetAvailability();
-}).catch(() => {
-  sheetConnected = false;
-  redoReady = false;
-  renderRedoAvailability();
-  renderSheetAvailability();
+watchSheetStatus(value => {
+  const availabilityChanged = sheetConnected !== (value?.sheet === true) || redoReady !== (value?.redo === true);
+  currentSheetState = value;
+  sheetConnected = value?.sheet === true;
+  redoReady = value?.redo === true;
+  $("connectionStatus").textContent = sheetStatusText(value);
+  $("connectionStatus").style.color = value?.health?.status === "ready" ? "var(--done)" : "var(--bad)";
+  if (availabilityChanged) renderRedoAvailability();
+  renderSheetAvailability(availabilityChanged);
 });
 
 function restoreOperatorHint() {
@@ -464,10 +465,8 @@ function renderQueueList() {
   const notice = $("listSheetNotice");
   if (queueJobs.length) {
     notice.style.display = "block";
-    notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
-    notice.textContent = sheetConnected
-      ? "Live Google Sheet connected — Confirm All saves every staged job below."
-      : PREVIEW_MESSAGE;
+    notice.style.color = currentSheetState?.health?.status === "ready" ? "var(--done)" : "var(--bad)";
+    notice.textContent = sheetStatusText(currentSheetState);
   } else {
     notice.style.display = "none";
   }
@@ -653,17 +652,19 @@ function renderButtons() {
   }
 }
 
-function renderSheetAvailability() {
+function renderSheetAvailability(availabilityChanged = true) {
   const notice = $("sheetNotice");
   if (notice) {
     notice.style.display = "block";
-    notice.style.color = sheetConnected ? "var(--done)" : "var(--bad)";
-    notice.textContent = sheetConnected
-      ? "Live Google Sheet connected — Confirm All (on the job list) saves this job."
-      : PREVIEW_MESSAGE;
+    notice.style.color = currentSheetState?.health?.status === "ready" ? "var(--done)" : "var(--bad)";
+    notice.textContent = sheetStatusText(currentSheetState);
   }
-  renderQueueList();
-  if (activeIndex >= 0) renderButtons();
+  if (availabilityChanged) {
+    renderQueueList();
+    if (activeIndex >= 0) renderButtons();
+  }
+  $("listSheetNotice").textContent = sheetStatusText(currentSheetState);
+  $("listSheetNotice").style.color = currentSheetState?.health?.status === "ready" ? "var(--done)" : "var(--bad)";
 }
 
 // Picking a status stages it on that job's list row — it does not save.

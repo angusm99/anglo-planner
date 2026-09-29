@@ -103,12 +103,11 @@ fetch("/api/stations").then(r => r.json()).then(stations => {
   $("sys").textContent = "OFFLINE — SERVER UNREACHABLE";
   $("sysDot").className = "off";
 });
-fetch("/api/capabilities").then(r => r.json()).then(state => {
-  $("sheetState").textContent = state.sheet ? "GOOGLE SHEET MASTER CONNECTED" : "LOCAL PREVIEW — SHEET OFF";
-  $("sheetState").className = state.sheet ? "on" : "off";
-}).catch(() => {
-  $("sheetState").textContent = "SHEET STATUS UNAVAILABLE";
-  $("sheetState").className = "off";
+watchSheetStatus(state => {
+  $("sheetState").textContent = sheetStatusText(state);
+  $("sheetState").className = state?.health?.status === "ready" ? "on" : "off";
+  $("sys").textContent = state ? "ONLINE" : "OFFLINE — SERVER UNREACHABLE";
+  $("sysDot").className = state ? "on" : "off";
 });
 
 let stopScanner = null;

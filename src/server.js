@@ -11,13 +11,14 @@ const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
 const {
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
-  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled,
+  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth,
 } = require("./sheet");
 
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const db = open();
 let redoBridgeReady = false;
+let sheetCheckedAt = null; // last successful capability check
 const redoInFlight = new Set();
 const COVER_ADMIN_HASH = 6454293043924497;
 
@@ -193,11 +194,12 @@ async function refreshFromSheet() {
 async function refreshSheetCapabilities() {
   const capabilities = await fetchSheetCapabilities();
   if (capabilities === null) {
-    console.log(`[sheet] REDO bridge: ${redoBridgeReady ? "READY" : "NOT READY"} (last known; capability check failed)`);
+    console.log("[sheet] capability check failed; health degraded (cached feature support retained)");
     return [];
   }
   redoBridgeReady = capabilities.includes("issue_log") && capabilities.includes("repick_done");
-  console.log(`[sheet] REDO bridge: ${redoBridgeReady ? "READY" : "NOT READY"}`);
+  sheetCheckedAt = new Date().toISOString();
+  console.log(`[sheet] capabilities confirmed; REDO supported: ${redoBridgeReady}; read health: ${sheetHealth().status}`);
   return capabilities;
 }
 
@@ -461,8 +463,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, STATIONS);
     }
     if (p === "/api/capabilities") {
-      if (sheetEnabled()) await refreshSheetCapabilities();
-      return json(res, 200, { sheet: sheetEnabled(), redo: redoBridgeReady });
+      // Always answer locally, including startup. Tablet polling must never
+      // start more upstream checks while Google is already slow.
+      return json(res, 200, { sheet: sheetEnabled(), redo: redoBridgeReady, checkedAt: sheetCheckedAt, health: sheetHealth() });
     }
     if (p === "/api/lookup") {
       const ref = url.searchParams.get("ref");

@@ -72,6 +72,31 @@ function startClock(el) {
 
 let terminalWakeLock = null;
 
+function sheetStatusText(state) {
+  if (!state) return "Server unreachable. Check Wi-Fi; keep this page open and retry.";
+  if (!state.sheet) return "Sheet connection is off. Updates cannot be saved.";
+  const health = state.health;
+  if (health?.status === "ready") return "Sheet checks passed. Confirm All saves your staged updates.";
+  const last = health?.fullRead?.lastSuccessAt;
+  const age = last ? ` Last Sheet read: ${new Date(last).toLocaleString("en-ZA")}.` : " No successful Sheet read since server restart.";
+  return (health?.status === "checking" ? "Checking Google Sheet." : "Sheet connection needs attention. Displayed jobs may be outdated.")
+    + age + " Check each save result before leaving.";
+}
+
+function watchSheetStatus(onStatus) {
+  async function poll() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch("/api/capabilities", { signal: controller.signal, cache: "no-store" });
+      if (!response.ok) throw new Error("Server status unavailable");
+      onStatus(await response.json());
+    } catch (_) { onStatus(null); }
+    finally { clearTimeout(timer); setTimeout(poll, 30000); }
+  }
+  poll();
+}
+
 async function keepTerminalAwake() {
   if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
   try {
