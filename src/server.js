@@ -14,11 +14,25 @@ const {
   fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth,
 } = require("./sheet");
 
+// The unattended background refreshes (setInterval, below) run with nobody
+// watching the console — an error here used to be an unhandled rejection,
+// which Node treats as fatal by default and kills the whole floor server
+// with zero trace. Log and keep running instead.
+process.on("uncaughtException", (err) => console.error("[fatal-guarded] uncaughtException:", err));
+process.on("unhandledRejection", (err) => console.error("[fatal-guarded] unhandledRejection:", err));
+
+// Timestamp every console line so Sheet timeouts can be matched to other jobs
+// hitting the same Google Sheet (e.g. the 30-minute WorkPool syncs).
+for (const level of ["log", "error"]) {
+  const write = console[level].bind(console);
+  console[level] = (...args) => write(new Date().toLocaleString("sv-SE"), ...args);
+}
+
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const db = open();
 let redoBridgeReady = false;
-let sheetCheckedAt = null; // last successful capability check
+let sheetCheckedAt = null; // last time Google actually answered a capability check
 const redoInFlight = new Set();
 const COVER_ADMIN_HASH = 6454293043924497;
 
@@ -37,20 +51,24 @@ const MIME = {
 
 const sseClients = new Set();
 
+function sseWrite(res, payload) {
+  if (res.writableEnded || res.destroyed) { sseClients.delete(res); return; }
+  try {
+    res.write(payload);
+  } catch {
+    sseClients.delete(res);
+    res.destroy();
+  }
+}
+
 function broadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of sseClients) {
-    if (res.writableEnded || res.destroyed) { sseClients.delete(res); continue; }
-    res.write(payload);
-  }
+  for (const res of sseClients) sseWrite(res, payload);
 }
 
 // Keep-alive comment so idle dashboard connections aren't dropped by the OS/browser.
 setInterval(() => {
-  for (const res of sseClients) {
-    if (res.writableEnded || res.destroyed) { sseClients.delete(res); continue; }
-    res.write(": ping\n\n");
-  }
+  for (const res of sseClients) sseWrite(res, ": ping\n\n");
 }, 25000).unref();
 
 function json(res, status, body) {
@@ -185,10 +203,18 @@ function upsertSheetJob(r) {
 async function refreshFromSheet() {
   const jobs = await fetchSheetJobs({ all: "1" });
   if (!jobs.length) return 0;
-  for (const r of jobs) upsertSheetJob(r);
-  console.log(`[sheet] cache refreshed: ${jobs.length} jobs`);
+  let applied = 0;
+  for (const r of jobs) {
+    try {
+      upsertSheetJob(r);
+      applied++;
+    } catch (err) {
+      console.error(`[sheet] skipped bad row (task ${r?.task_no || "?"}): ${err.message}`);
+    }
+  }
+  console.log(`[sheet] cache refreshed: ${applied} jobs`);
   broadcast("job-updated", { jobId: null, applied: [] }); // nudge dashboards
-  return jobs.length;
+  return applied;
 }
 
 async function refreshSheetCapabilities() {
@@ -345,6 +371,14 @@ async function updateStation(body) {
   }
 
   const applied = applyJobChanges(job, changes, actor, source);
+
+  // A confirm that changes nothing (job already at that status) writes no
+  // field event, so the audit trail can't tell "never touched" from
+  // "touched, already correct" — log a no-op marker so it can.
+  if (!applied.length) {
+    db.prepare(`INSERT INTO events (job_id, field, old_value, new_value, actor, source) VALUES (?,?,?,?,?,?)`)
+      .run(jobId, "confirm-noop", String(value || ""), String(value || ""), String(actor || ""), String(source || ""));
+  }
 
   const fresh = getJob(jobId);
   broadcast("job-updated", { jobId, applied });
@@ -541,7 +575,12 @@ const server = http.createServer(async (req, res) => {
       });
       res.write("retry: 3000\n\n");
       sseClients.add(res);
-      req.on("close", () => sseClients.delete(res));
+      const cleanup = () => {
+        sseClients.delete(res);
+        res.end();
+      };
+      req.on("close", cleanup);
+      res.on("error", cleanup);
       return;
     }
 
@@ -568,6 +607,13 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// A failed bind must end the process visibly (non-zero exit), not be
+// swallowed by the crash guard above, so the launcher/Scheduled Task can retry.
+server.on("error", (err) => {
+  console.error(`[server] cannot listen on port ${PORT}: ${err.code || err.message}. Is another Factory Terminal server already running?`);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`Anglo planner running at http://localhost:${PORT}`);
   console.log(`Stations: http://localhost:${PORT}/station/1 .. /station/8`);
@@ -582,3 +628,5 @@ server.listen(PORT, () => {
     console.log("Sheet sync: OFF — set SHEET_WEBAPP_URL and SHEET_TOKEN to enable");
   }
 });
+
+module.exports = { sseWrite, sseClients, server };

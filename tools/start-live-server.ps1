@@ -115,11 +115,25 @@ Write-Host $WebAppUrl
 Write-Host ""
 
 Write-Host "Stopping any existing local server on port 3300..." -ForegroundColor Cyan
-Get-NetTCPConnection -LocalPort 3300 -State Listen -ErrorAction SilentlyContinue |
-  Select-Object -ExpandProperty OwningProcess -Unique |
-  ForEach-Object {
-    Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
-  }
+# netstat and the .NET listener list are used instead of Get-NetTCPConnection,
+# which takes ~15 s per call on this PC (2026-09-29).
+function Test-Port3300Listening {
+  [bool]([System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
+    Where-Object { $_.Port -eq 3300 })
+}
+netstat -ano | Select-String -Pattern '^\s*TCP\s+\S+:3300\s+\S+\s+LISTENING\s+(\d+)' |
+  ForEach-Object { [int]$_.Matches[0].Groups[1].Value } | Sort-Object -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+# Windows can hold the port briefly after the old process dies; starting too
+# soon fails with EADDRINUSE and leaves no server running.
+$deadline = (Get-Date).AddSeconds(20)
+while ((Test-Port3300Listening) -and (Get-Date) -lt $deadline) {
+  Start-Sleep -Milliseconds 500
+}
+if (Test-Port3300Listening) {
+  throw "Port 3300 is still in use 20 seconds after stopping the old server. Close the other server window and run this again."
+}
 
 $env:SHEET_WEBAPP_URL = $WebAppUrl
 

@@ -497,12 +497,21 @@ async function saveEntry(entry) {
   renderQueueList();
 }
 
+let confirmAllInFlight = false;
 $("confirmAllBtn").onclick = async () => {
+  if (confirmAllInFlight) return; // one tap in progress already saves the whole staged list
   const targets = queueJobs.filter((e) => e.status === "staged" || e.status === "save-error");
   if (!targets.length) return;
-  for (const entry of targets) await saveEntry(entry);
-  const savedCount = targets.filter((e) => e.status === "saved").length;
-  toast(savedCount === targets.length ? `Saved ${savedCount} ✓` : `Saved ${savedCount} of ${targets.length} — check errors below`);
+  confirmAllInFlight = true;
+  $("confirmAllBtn").disabled = true;
+  try {
+    for (const entry of targets) await saveEntry(entry);
+    const savedCount = targets.filter((e) => e.status === "saved").length;
+    toast(savedCount === targets.length ? `Saved ${savedCount} ✓` : `Saved ${savedCount} of ${targets.length} — check errors below`);
+  } finally {
+    confirmAllInFlight = false;
+    renderQueueList();
+  }
 };
 
 function backToList() {
