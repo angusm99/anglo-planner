@@ -127,7 +127,7 @@ function requestText(target, options = {}, body = null, timeoutMs = REQUEST_TIME
   });
 }
 
-async function followRedirects(response, deadline) {
+async function followRedirects(response, deadline, requestTimeoutMs) {
   // Google sometimes redirects content back through script.google.com before
   // returning JSON. Follow the GET chain without ever resending a POST body.
   for (let hops = 0; [301, 302, 303, 307, 308].includes(response.status) && response.headers.location; hops++) {
@@ -136,7 +136,7 @@ async function followRedirects(response, deadline) {
     if (remaining <= 0) throw new Error("Sheet request timed out during redirects");
     const target = new URL(response.headers.location, response.url);
     if (target.protocol !== "https:") throw new Error("Sheet returned a non-HTTPS redirect");
-    response = await requestText(target, {}, null, remaining);
+    response = await requestText(target, {}, null, Math.min(remaining, requestTimeoutMs));
   }
   return response;
 }
@@ -151,16 +151,16 @@ async function post(urlStr, data) {
   // A method-preserving redirect is not the Apps Script acknowledgement
   // protocol. Fail it rather than replaying a possibly completed write.
   if (response.status === 307 || response.status === 308) return response;
-  return followRedirects(response, deadline);
+  return followRedirects(response, deadline, REQUEST_TIMEOUT_MS);
 }
 
-async function get(params, timeoutMs = REQUEST_TIMEOUT_MS) {
+async function get(params, timeoutMs = REQUEST_TIMEOUT_MS, totalTimeoutMs = timeoutMs) {
   const u = new URL(URL_STR);
   u.searchParams.set("token", TOKEN);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + totalTimeoutMs;
   const response = await requestText(u, {}, null, timeoutMs);
-  return responseJson(await followRedirects(response, deadline));
+  return responseJson(await followRedirects(response, deadline, timeoutMs));
 }
 
 async function read(params, field, timeoutMs, healthKey) {
@@ -169,7 +169,9 @@ async function read(params, field, timeoutMs, healthKey) {
   const attempts = healthKey ? 2 : 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const body = await get(params, timeoutMs);
+      // Background chains get two request windows in total, not a fresh
+      // unlimited window per redirect. Interactive lookups keep one window.
+      const body = await get(params, timeoutMs, healthKey ? timeoutMs * 2 : timeoutMs);
       if (body?.ok !== true || !Array.isArray(body[field])) {
         const error = new Error(body?.ok === false ? `Sheet rejected read: ${safeError(body.error || "unknown error")}` : "Invalid Sheet response shape");
         error.retryable = false;
