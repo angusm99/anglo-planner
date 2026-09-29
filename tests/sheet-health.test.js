@@ -70,6 +70,17 @@ test("Sheet reads retry transient errors, preserve last success, flag stale data
     responses.push({ aborted: true }, success);
     await sheet.fetchSheetJobs({ all: "1" });
     assert.equal(sheet.sheetHealth().status, "ready");
+    // Apps Script's one-shot echo URL occasionally 404s: retry the whole chain.
+    const echoRedirect = { status: 302, headers: { location: "https://echo.example.invalid/macros/echo" }, body: "" };
+    responses.push(echoRedirect, { status: 404, type: "text/html", body: "<html>gone</html>" }, echoRedirect, success);
+    assert.equal((await sheet.fetchSheetJobs({ all: "1" })).length, 1, "404 on redirected hop is retried");
+    // A 404 from the /exec URL itself means no deployment: do not retry.
+    let calls404 = calls;
+    responses.push({ status: 404, type: "text/html", body: "<html>no deployment</html>" });
+    assert.deepEqual(await sheet.fetchSheetJobs({ all: "1" }), []);
+    assert.equal(calls - calls404, 1, "404 from the /exec URL is not retried");
+    responses.push({ body: JSON.stringify({ ok: true, jobs: [{ biz_ref: "D1" }] }) });
+    await sheet.fetchSheetJobs({ all: "1" });
     const before = calls;
     responses.push({ status: 403, body: "Forbidden secret-never-log" });
     assert.equal(await sheet.fetchSheetCapabilities(), null);

@@ -42,7 +42,11 @@ function responseJson(response) {
   const detail = `HTTP ${response.status}; type=${type}; bytes=${Buffer.byteLength(response.body)}`;
   if (response.status < 200 || response.status >= 300) {
     const error = new Error(detail);
-    error.retryable = response.status === 429 || response.status >= 500;
+    // A 404 on Apps Script's one-shot redirect target (googleusercontent echo
+    // URL) is transient; a 404 from the /exec URL itself means no deployment.
+    let redirectedHop = false;
+    try { redirectedHop = new URL(response.url).host !== new URL(URL_STR).host; } catch { /* unknown url: treat as direct */ }
+    error.retryable = response.status === 429 || response.status >= 500 || (response.status === 404 && redirectedHop);
     throw error;
   }
   try { return JSON.parse(response.body); }
