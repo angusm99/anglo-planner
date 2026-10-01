@@ -72,6 +72,8 @@ function applyCascade(job, stationNum, rawValue) {
       changes.job_status = "FRAMES+BEADS";
     } else if (js === "GLASS READY") {
       changes.job_status = "BEADS+GLASS";
+    } else if (js === "FRAMES+GLASS") {
+      changes.job_status = "ALL READY";
     } else if (["DONE", "BEADS DONE", "FRAMES+BEADS", "BEADS+FRAMES", "BEADS+GLASS", "ALL READY"].includes(js)) {
       changes.job_status = js;
     } else {

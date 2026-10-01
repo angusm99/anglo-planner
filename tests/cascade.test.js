@@ -131,6 +131,11 @@ test("S8 DONE after frame completion combines to FRAMES+BEADS", () => {
   assert.deepStrictEqual(applyCascade(job, 8, "DONE"), { job_status: "FRAMES+BEADS" });
 });
 
+test("S8 DONE after frames and glass gives ALL READY", () => {
+  const job = { ...blank, job_status: "FRAMES+GLASS" };
+  assert.deepStrictEqual(applyCascade(job, 8, "DONE"), { job_status: "ALL READY" });
+});
+
 test("S8 does not downgrade an already completed job", () => {
   const job = { ...blank, job_status: "DONE" };
   assert.deepStrictEqual(applyCascade(job, 8, "DONE"), { job_status: "DONE" });
