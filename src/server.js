@@ -528,6 +528,10 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   try {
+    const stationTablet = /(?:^|;\s*)factoryCoverStation=(4|5|6|8)(?:;|$)/.test(req.headers.cookie || "");
+    if (stationTablet && (p === "/foreman-board" || p === "/api/board/login")) {
+      return json(res,403,{error:"Foreman controls are available on the master tablet"});
+    }
     if (p.startsWith("/api/board/") && req.method === "POST" &&
         (req.headers["content-type"]?.split(";")[0] !== "application/json" ||
          (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host))) {
@@ -568,7 +572,7 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/capabilities") {
       // Always answer locally, including startup. Tablet polling must never
       // start more upstream checks while Google is already slow.
-      return json(res, 200, { sheet: sheetEnabled(), redo: redoBridgeReady, checkedAt: sheetCheckedAt, health: sheetHealth() });
+      return json(res, 200, { board:true, sheet: sheetEnabled(), redo: redoBridgeReady, checkedAt: sheetCheckedAt, health: sheetHealth() });
     }
     if (p === "/api/lookup") {
       const ref = url.searchParams.get("ref");

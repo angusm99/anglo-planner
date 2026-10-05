@@ -9,10 +9,11 @@ async function api(url,body){const r=await fetch(url,body?{method:"POST",headers
 function actor(){const a=$("actor").value.trim();if(!a)throw Error("Type your name before making a change");return a;}
 async function act(body){try{body.station=station;body.actor=actor();await api("/api/board/"+(body.action?"allocate":"change"),body);await load();}catch(e){$("notice").textContent=e.message;}}
 function render(){
+ const selected=new Map([...document.querySelectorAll('select[data-job]')].map(n=>[n.dataset.job,n.value]));
  $("title").textContent=`${master?"Foreman · ":""}${board.name} · Station ${station}`;
- $("single").href=`/station/${station}`;
+ $("single").href=`/station/${station}?regular=1`; $("operator").href=master?"/cover.html?station=foreman":`/station/${station}`;
  $("notice").textContent=board.preview?"REVIEW PREVIEW — confirmations disabled; allocations affect this preview only.":board.wipError|| (board.wipStale?"WIP TV is stale; changes paused.":"Connected · confirmations save to the master planner");
- $("source").textContent=board.updated+" · Read "+new Date(board.wipReadAt).toLocaleTimeString()+ (station===5?" · Saw 2 uses its own master planner status; WIP TV has no Saw 2 column.":" · WIP TV status shown beneath the current station status.");
+ $("source").textContent=board.updated+" · Read "+new Date(board.wipReadAt).toLocaleTimeString()+ (station===5?" · Saw 2 uses its own master planner status; WIP TV has no Saw 2 column.":"");
  $("login").hidden=board.foreman;
  $("metrics").replaceChildren();
  const counts=[board.jobs.length,board.jobs.filter(j=>!done(j.status)&&!issue(j.status)).length,board.jobs.filter(j=>done(j.status)).length,board.jobs.filter(j=>issue(j.status)).length];
@@ -20,7 +21,7 @@ function render(){
  $("days").replaceChildren();
  const days=[...board.days,...new Set(board.jobs.filter(j=>!board.days.includes(j.day)).map(j=>j.day))];
  for(const day of days){const rows=board.jobs.filter(j=>j.day===day);const section=el("section",undefined,"day");section.append(el("h2",`${day}${board.days.includes(day)?"":" · Earlier manual allocation"} · ${rows.length} jobs`));if(!rows.length)section.append(el("p","No jobs allocated."));
- for(const j of rows){const row=el("article",undefined,"job");row.append(el("div",j.biz_ref||j.task_no,"ref"));const info=el("div",j.customer);info.append(el("div",`${j.colour||""} · ${j.units??""} units · ${j.source}${j.issuer?" · Issued by "+j.issuer:""}${j.note?" · "+j.note:""}`,"detail"));row.append(info);const status=el("div",j.status||"QUEUED","status "+(done(j.status)?"done":issue(j.status)?"problem":""));if(j.wipStatus)status.append(el("div","WIP TV: "+j.wipStatus,"detail"));row.append(status);const controls=el("div",undefined,"controls");const select=el("select");select.setAttribute("aria-label","Status for "+(j.biz_ref||j.task_no));for(const v of config.buttons.filter(v=>v!=="REDO")){const o=el("option",v);o.value=v;select.append(o);}select.value=config.defaultStatus;
+ for(const j of rows){const row=el("article",undefined,"job");row.append(el("div",j.biz_ref||j.task_no,"ref"));const info=el("div",j.customer);info.append(el("div",`${j.colour||""} · ${j.units??""} units · ${j.source}${j.issuer?" · Issued by "+j.issuer:""}${j.note?" · "+j.note:""}`,"detail"));row.append(info);const status=el("div",j.status||"QUEUED","status "+(done(j.status)?"done":issue(j.status)?"problem":""));row.append(status);const controls=el("div",undefined,"controls");const select=el("select");select.setAttribute("aria-label","Status for "+(j.biz_ref||j.task_no));for(const v of config.buttons.filter(v=>v!=="REDO")){const o=el("option",v);o.value=v;select.append(o);}select.dataset.job=String(j.id);select.value=selected.get(String(j.id))||config.defaultStatus;
  const save=el("button","Confirm");save.disabled=!j.id||board.preview||board.wipStale||!!board.wipError;save.onclick=async()=>{try{const a=actor();if(confirm(`${a}: set ${j.biz_ref||j.task_no} to ${select.value}? Normal production cascade applies.`)){save.disabled=true;await act({jobId:j.id,value:select.value});}}catch(e){$("notice").textContent=e.message;}};controls.append(select,save);
  if(j.undoId){const undo=el("button","Unconfirm");undo.disabled=save.disabled;undo.onclick=()=>{if(confirm("Restore the previous status and this confirmation's cascade changes? Later changes will block undo."))act({jobId:j.id,undoId:j.undoId});};controls.append(undo);}
  if(master&&board.foreman){const edit=el("button","Edit allocation");edit.onclick=()=>openAllocation(j);const remove=el("button","Remove");remove.onclick=()=>{if(confirm("Remove this job from this station board?"))act({action:"remove",jobId:j.id});};controls.append(edit,remove);}
@@ -32,4 +33,5 @@ $("find").onclick=async()=>{try{const q=$("search").value.trim();if(q.length<2)t
 $("allocationForm").onsubmit=async e=>{e.preventDefault();try{await api("/api/board/allocate",{station,actor:actor(),action:"allocate",jobId:Number($("job").value),day:$("day").value,reason:"MANUAL ISSUE",issuer:$("issuer").value,note:$("note").value});$("allocation").close();await load();}catch(err){$("allocationError").textContent=err.message;}};
 $("cancel").onclick=()=>$("allocation").close();$("add").onclick=()=>{if(board)openAllocation();};$("refresh").onclick=load;$("stations").hidden=!master;
 $("login").onclick=async()=>{const password=prompt("Existing Factory Terminal admin password");if(password===null)return;try{await api("/api/board/login",{password});await load();}catch(e){$("notice").textContent=e.message;}};
+try { if(!master) $("actor").value=sessionStorage.getItem(`board-operator-${station}`)||""; } catch (_) {}
 load();setInterval(load,30000);

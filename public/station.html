@@ -278,12 +278,22 @@ function restoreOperatorHint() {
   } catch (_) { /* bad local preference should never block the station */ }
 }
 
-function confirmOperator(name, type) {
+async function confirmOperator(name, type) {
   const clean = String(name || "").trim();
   if (!clean) { toast("Enter the guest operator name"); return; }
   operatorName = clean;
   operatorType = type;
   localStorage.setItem(`anglo-operator-${stationNum}`, JSON.stringify({ name: clean, type }));
+  if (type === "primary" && [4,5,8].includes(stationNum) && !new URLSearchParams(location.search).has("regular") && !initialRef) {
+    try {
+      const capabilities = await fetch("/api/capabilities").then(r=>r.json());
+      if (capabilities.board) {
+        sessionStorage.setItem(`board-operator-${stationNum}`,clean);
+        location.href = `/board/${stationNum}`;
+        return;
+      }
+    } catch (_) { /* retain normal updates until the server is upgraded */ }
+  }
   $("stWho").textContent = `Operator: ${clean}`;
   $("changeOperator").style.display = "inline-block";
   $("operatorView").style.display = "none";

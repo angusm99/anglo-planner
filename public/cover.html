@@ -125,7 +125,6 @@
   <section class="actions">
     <div id="message" class="message"></div>
     <button id="start" type="button">START NORMAL OPERATION</button>
-    <button id="jobBoard" type="button" hidden>THREE-DAY JOB BOARD</button>
     <button id="admin" class="admin" type="button">ADMIN / NORMAL TABLET MODE</button>
   </section>
 </main>
@@ -137,25 +136,36 @@ const STATION_COVERS = {
   8: { name: "BEAD SAW" },
 };
 const params = new URLSearchParams(location.search);
+const isForeman = params.get("station") === "foreman";
 const station = Number(params.get("station") || 0);
 const cover = STATION_COVERS[station] || { name: "UNKNOWN", operator: "Check label" };
 const target = `/station/${station}`;
-if ([4,5,8].includes(Number(station))) {
-  document.getElementById("jobBoard").hidden = false;
-  document.getElementById("jobBoard").onclick = () => location.href = `/board/${station}`;
-}
 
 try {
-  if (STATION_COVERS[station]) {
-    localStorage.setItem("factoryCoverStation", String(station));
-    document.cookie = `factoryCoverStation=${station}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  if (STATION_COVERS[station] || isForeman) {
+    const identity = isForeman ? "foreman" : String(station);
+    localStorage.setItem("factoryCoverStation", identity);
+    document.cookie = `factoryCoverStation=${identity}; Path=/; Max-Age=31536000; SameSite=Lax`;
   }
 } catch (_) {}
 
 document.getElementById("station").textContent = station ? `STATION-${station}` : "STATION-?";
 document.getElementById("name").textContent = cover.name;
 document.getElementById("subname").textContent = "FACTORY TERMINAL";
-document.getElementById("start").addEventListener("click", () => {
+if (isForeman) {
+  document.getElementById("station").textContent = "MASTER";
+  document.getElementById("name").textContent = "FOREMAN";
+  document.getElementById("admin").hidden = true;
+}
+document.getElementById("start").addEventListener("click", async () => {
+  if (isForeman) {
+    try {
+      const capabilities = await fetch("/api/capabilities").then(r=>r.json());
+      if (!capabilities.board) throw Error("Dashboard update is awaiting the server restart");
+      location.href = "/foreman-board";
+    } catch (e) { document.getElementById("message").textContent=e.message; }
+    return;
+  }
   if (station) location.href = target;
 });
 
