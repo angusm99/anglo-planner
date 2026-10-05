@@ -10,11 +10,11 @@ const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
 const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
 const { createBoard } = require("./stationBoard");
-const { getWip,readMasterStatus } = require("./wipTv");
+const { getWip,readMasterStatus,readMasterJobs } = require("./wipTv");
 const crypto = require("node:crypto");
 const {
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
-  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth,
+  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth, fullReadConfirmed,
 } = require("./sheet");
 
 // The unattended background refreshes (setInterval, below) run with nobody
@@ -224,7 +224,12 @@ function upsertSheetJob(r) {
 // ponytail: upsert-only — rows deleted from the sheet linger in the cache
 // until archived in /office. Add delete-sync if that ever actually bites.
 async function refreshFromSheet() {
-  const jobs = await fetchSheetJobs({ all: "1" });
+  let jobs;
+  try { jobs=await readMasterJobs();fullReadConfirmed(); }
+  catch (_) {
+    console.error("[sheet] direct master read failed; trying bridge and keeping previous cache on failure");
+    jobs=await fetchSheetJobs({ all: "1" });
+  }
   if (!jobs.length) return 0;
   let applied = 0;
   for (const r of jobs) {

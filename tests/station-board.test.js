@@ -1,6 +1,15 @@
 "use strict";
 const test=require("node:test"), assert=require("node:assert/strict"), {DatabaseSync}=require("node:sqlite");
 const {createBoard,parseWip}=require("../src/stationBoard");
+test("direct full master read preserves planner fields and never uses checkbox M as a ref",()=>{
+ const {plannerJobs}=require("../src/wipTv");
+ const r=Array(23).fill("");r[0]=555184;r[1]=46301;r[4]="Customer";r[6]=2;r[12]=false;r[13]="D3282";r[18]="done";r[21]="glass ready";
+ const [j]=plannerJobs("SEPTEMBER-2026",[r]);
+ assert.equal(j.biz_ref,"D3282");assert.equal(j.task_no,"555184");assert.equal(j.install_date,"2026-10-06");
+ assert.equal(j.qty_windows,2);assert.equal(j.qty_hinged,null);assert.equal(j.glasslist,0);assert.equal(j.s5,"DONE");assert.equal(j.job_status,"GLASS READY");
+ r[13]="";assert.equal(plannerJobs("JOBS IN QUEUE",[r])[0].biz_ref,"");
+ r[4]="";assert.deepEqual(plannerJobs("JOBS IN QUEUE",[r]),[]);
+});
 test("direct master lookup reads the exact job and rejects missing or duplicate identities",()=>{
  const {masterStatus}=require("../src/wipTv");
  const row=Array(23).fill("");row[0]="549355";row[3]="D3128";row[18]="done";row[21]="queue out";

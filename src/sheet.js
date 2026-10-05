@@ -210,6 +210,10 @@ async function fetchSheetCapabilities() {
 }
 
 const sheetEnabled = () => Boolean(URL_STR);
+function fullReadConfirmed() {
+  readHealth.fullRead.lastSuccessAt=new Date().toISOString();
+  readHealth.fullRead.lastError=null;
+}
 
 async function postConfirmed(payload, label, attempts = 3) {
   if (!URL_STR || !payload) return false;
@@ -247,5 +251,5 @@ function pushRepickDone(job, issue) {
 module.exports = {
   buildPayload, buildIssuePayload, buildRepickDonePayload,
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
-  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth,
+  fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth, fullReadConfirmed,
 };
