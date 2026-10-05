@@ -5,10 +5,11 @@ let board, config, loading=false, editing=null;
 const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):["DONE","DONE-NO PW"].includes(s);
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
-async function api(url,body){const r=await fetch(url,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);const v=await r.json();if(!r.ok)throw Error(v.error||"Request failed");return v;}
+async function api(url,body){const r=await fetch(url,body?{signal:AbortSignal.timeout(180000),method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{signal:AbortSignal.timeout(30000)});const v=await r.json();if(!r.ok)throw Error(v.error||"Request failed");return v;}
 function actor(){const a=$("actor").value.trim();if(!a)throw Error("Type your name before making a change");return a;}
 async function act(body){try{body.station=station;body.actor=actor();await api("/api/board/"+(body.action?"allocate":"change"),body);await load();}catch(e){$("notice").textContent=e.message;}}
 function render(){
+ $("add").disabled=false;
  const selected=new Map([...document.querySelectorAll('select[data-job]')].map(n=>[n.dataset.job,n.value]));
  $("title").textContent=`${master?"Foreman · ":""}${board.name} · Station ${station}`;
  $("single").href=`/station/${station}?regular=1`; $("operator").href=master?"/cover.html?station=foreman":`/station/${station}`;
@@ -29,7 +30,8 @@ function render(){
 }
 async function load(){if(loading)return;loading=true;try{if(!config)config=(await api("/api/stations"))[station];board=await api("/api/board?station="+station);render();}catch(e){$("notice").textContent=e.message;}finally{loading=false;}}
 function openAllocation(j){editing=j||null;$("allocationForm").reset();$("allocationError").textContent="";$("job").replaceChildren();$("day").replaceChildren();for(const d of board.days){const o=el("option",d);o.value=d;$("day").append(o);}if(j){const o=el("option",`${j.biz_ref} · ${j.customer}`);o.value=j.id;$("job").append(o);$("day").value=board.days.includes(j.day)?j.day:board.days[0];$("issuer").value=j.issuer||"";$("note").value=j.note||"";}$("allocation").showModal();}
-$("find").onclick=async()=>{try{const q=$("search").value.trim();if(q.length<2)throw Error("Enter at least two characters");const jobs=await api("/api/search?q="+encodeURIComponent(q));$("job").replaceChildren();for(const j of jobs.filter(j=>j.source_tab!=="OFFICE")){const o=el("option",`${j.biz_ref} · ${j.customer} · ${j.source_tab}`);o.value=j.id;$("job").append(o);}if(!$("job").options.length)throw Error("No master planner job found");}catch(e){$("allocationError").textContent=e.message;}};
+$("find").onclick=async()=>{ $("find").disabled=true; $("allocationError").textContent="Finding job…"; try{const q=$("search").value.trim();if(q.length<2)throw Error("Enter at least two characters");const jobs=await api("/api/search?q="+encodeURIComponent(q));$("job").replaceChildren();for(const j of jobs.filter(j=>j.source_tab!=="OFFICE")){const o=el("option",`${j.biz_ref} · ${j.customer} · ${j.source_tab}`);o.value=j.id;$("job").append(o);}if(!$("job").options.length)throw Error("No master planner job found"); $("allocationError").textContent=`Found ${$("job").options.length} matching job(s). Select the correct one below.`;}catch(e){$("allocationError").textContent=e.message;}finally{$("find").disabled=false;}};
+$("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("find").click();}});
 $("allocationForm").onsubmit=async e=>{e.preventDefault();try{await api("/api/board/allocate",{station,actor:actor(),action:"allocate",jobId:Number($("job").value),day:$("day").value,reason:"MANUAL ISSUE",issuer:$("issuer").value,note:$("note").value});$("allocation").close();await load();}catch(err){$("allocationError").textContent=err.message;}};
 $("cancel").onclick=()=>$("allocation").close();$("add").onclick=()=>{if(board)openAllocation();};$("refresh").onclick=load;$("stations").hidden=!master;
 $("login").onclick=async()=>{const password=prompt("Existing Factory Terminal admin password");if(password===null)return;try{await api("/api/board/login",{password});await load();}catch(e){$("notice").textContent=e.message;}};
