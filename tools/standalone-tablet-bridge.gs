@@ -55,20 +55,16 @@ function doGet(e) {
         // D is primary. N sometimes mirrors it via formula on JOBS IN QUEUE
         // before D itself is filled in (confirmed live 2026-08-20 -- a ref
         // can sit in N with D still blank).
-        // M and W: UNRESOLVED, checked anyway (exact-match only, so a wrong
-        // guess can't misfire). export_xlsx.py treats M as a glasslist
-        // checkbox; plannerCore.gs's handleSendToPrintTransfer_ treats it as
-        // BIZREF_2 and W as BIZREF_3, and actually falls back through both
-        // on every live cover-sheet print. Two live, contradicting sources --
-        // don't trust either claim over the other without checking real data.
-        var mRef = _s_(r[12]);
+        // W is the third ref column. M is NOT a ref: it is the glass-list
+        // checkbox (Angus, 2026-10-05) - using it gave jobs with a blank D
+        // the ref "false"/"true", which then matched unticked rows.
         var nRef = _s_(r[13]);
         var wRef = _s_(r[22]);
-        var effectiveRef = bizRef || mRef || nRef || wRef;
+        var effectiveRef = bizRef || nRef || wRef;
         var customer = _s_(r[4]);
         if (!taskNo && !effectiveRef) return;
         if (taskNo.toUpperCase().indexOf('REF') !== -1 || effectiveRef.toUpperCase().indexOf('BIZMAN') !== -1 || !customer) return;
-        if (!all && taskNo.toUpperCase() !== q && _u_(bizRef) !== q && _u_(mRef) !== q && _u_(nRef) !== q && _u_(wRef) !== q) return;
+        if (!all && taskNo.toUpperCase() !== q && _u_(bizRef) !== q && _u_(nRef) !== q && _u_(wRef) !== q) return;
         jobs.push({
           task_no: taskNo, biz_ref: effectiveRef, customer: customer,
           install_date: _date_(r[1], tz), send_to_dash: _s_(r[2]), colour: _s_(r[5]),
@@ -234,11 +230,11 @@ function _writeRedoneAcrossPlanner_(bizRef, cycle) {
     if (!_isPlannerTab_(sheet.getName())) return;
     var last = sheet.getLastRow();
     if (last < DATA_START_ROW) return;
-    // Same D/M/N/W fallback as _findRow_ -- a ref checked off in ISSUE LOG
+    // Same D/N/W fallback as _findRow_ -- a ref checked off in ISSUE LOG
     // still needs to resolve even if this row's D is blank.
     var refs = sheet.getRange(DATA_START_ROW, 1, last - DATA_START_ROW + 1, 23).getValues();
     refs.forEach(function (row, i) {
-      if (_u_(row[3]) === bizRef || _u_(row[12]) === bizRef || _u_(row[13]) === bizRef || _u_(row[22]) === bizRef) {
+      if (_u_(row[3]) === bizRef || _u_(row[13]) === bizRef || _u_(row[22]) === bizRef) {
         sheet.getRange(DATA_START_ROW + i, COL.s3).setValue('REDONE' + cycle);
         wrote.push(sheet.getName() + ' R' + (DATA_START_ROW + i));
       }
@@ -278,12 +274,16 @@ function _findRow_(sheet, taskNo, bizRef) {
   var count = last - DATA_START_ROW + 1;
   if (count < 1) return -1;
   var task = _s_(taskNo), ref = _u_(bizRef);
-  // Same D/M/N/W fallback as doGet's job listing -- see the comment there.
+  // Same D/N/W fallback as doGet's job listing -- see the comment there.
   var keys = sheet.getRange(DATA_START_ROW, 1, count, 23).getValues();
+  // Task number wins over the whole tab before any ref is tried, so a ref
+  // match on an earlier row can never take a write meant for this task.
   for (var i = 0; i < keys.length; i++) {
     if (task && _s_(keys[i][0]) === task) return DATA_START_ROW + i;
-    if (ref && (_u_(keys[i][3]) === ref || _u_(keys[i][12]) === ref || _u_(keys[i][13]) === ref || _u_(keys[i][22]) === ref)) {
-      return DATA_START_ROW + i;
+  }
+  for (var j = 0; j < keys.length; j++) {
+    if (ref && (_u_(keys[j][3]) === ref || _u_(keys[j][13]) === ref || _u_(keys[j][22]) === ref)) {
+      return DATA_START_ROW + j;
     }
   }
   return -1;

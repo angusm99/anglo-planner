@@ -18,7 +18,7 @@ async function readValues(range) {
 function masterStatus(job, rows) {
   const matches = rows.filter(r => job.task_no
     ? String(r[0] || "").trim() === job.task_no
-    : [3,12,13,22].some(i => String(r[i] || "").trim().toUpperCase() === job.biz_ref));
+    : [3,13,22].some(i => String(r[i] || "").trim().toUpperCase() === job.biz_ref));
   if (matches.length !== 1) throw Error("Master job missing or duplicated; ask the foreman to reconcile");
   const row=matches[0], result={...job};
   ["s1","s2","s3","s4","s5","s6","s7","job_status"].forEach((field,i)=>{result[field]=String(row[14+i] || "").trim().toUpperCase();});

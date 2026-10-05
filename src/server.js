@@ -377,6 +377,19 @@ function applyJobChanges(job, changes, actor, source) {
 async function updateStation(body) {
   return withJobLock(body.jobId, () => updateStationUnlocked(body));
 }
+// One send only (a lost acknowledgement can follow a completed write), then
+// reconcile by reading the master cell back - never by resending. Shared by
+// the original station screens and the station boards.
+async function pushStationChanges(job, changes) {
+  if (await pushStationUpdateConfirmed(job, changes)) return true;
+  try {
+    const current = await readMasterStatus(job);
+    return changes.every((c) => norm(current[c.field]) === norm(c.to));
+  } catch {
+    return false;
+  }
+}
+
 async function updateStationUnlocked(body) {
   const { jobId, station, value, actor, source } = body;
   const job = getJob(jobId);
@@ -392,8 +405,8 @@ async function updateStationUnlocked(body) {
   const planned = Object.entries(changes).map(([field, newValue]) => ({
     field, from: norm(job[field]), to: newValue,
   })).filter((change) => change.from !== change.to);
-  if (planned.length && !await pushStationUpdateConfirmed(job, planned)) {
-    return { error: "Google Sheet did not confirm the update; nothing was changed" };
+  if (planned.length && !await pushStationChanges(job, planned)) {
+    return { error: "Google Sheet did not confirm the update. Check the Sheet before trying again" };
   }
 
   const applied = applyJobChanges(job, changes, actor, source);
@@ -516,12 +529,7 @@ function listIssues(ref) {
 
 const board = createBoard(db, {
   live: readMasterStatus,
-  push:async (job,changes) => {
-    if (await pushStationUpdateConfirmed(job,changes)) return true;
-    // Reconcile an ambiguous acknowledgement by reading, never resending.
-    const current=await readMasterStatus(job);
-    return changes.every(c=>norm(current[c.field])===norm(c.to));
-  },
+  push: pushStationChanges,
   apply:writeJobChanges,
 });
 const server = http.createServer(async (req, res) => {

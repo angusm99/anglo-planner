@@ -9,6 +9,9 @@ test("direct master lookup reads the exact job and rejects missing or duplicate 
  assert.throws(()=>masterStatus(job,[]),/missing or duplicated/);
  assert.throws(()=>masterStatus(job,[row,row]),/missing or duplicated/);
  assert.equal(masterStatus({...job,task_no:""},[row]).id,1566);
+ // Column M (index 12) is the glass-list checkbox, never a ref.
+ const glass=Array(23).fill("");glass[12]="D3128";
+ assert.equal(masterStatus({...job,task_no:""},[row,glass]).id,1566);
 });
 test("station board allocation, acknowledged cascade, and safe undo",async()=>{
  const db=new DatabaseSync(":memory:");

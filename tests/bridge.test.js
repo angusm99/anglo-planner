@@ -48,18 +48,19 @@ test("uses SpreadsheetApp.openById everywhere, never getActive", () => {
   assert.match(source, /function _ss_\(\)\s*{\s*return SpreadsheetApp\.openById\(SPREADSHEET_ID\);/);
 });
 
-test("ref lookup and row-finding check D, M, N and W, not just D", () => {
+test("ref lookup and row-finding check D, N and W, never the M glass-list checkbox", () => {
   // Confirmed live 2026-08-20: a ref can sit in column N on JOBS IN QUEUE
-  // (index 13) with D still blank. M (index 12) and W (index 22) are
-  // unresolved -- plannerCore.gs's handleSendToPrintTransfer_ treats them as
-  // BIZREF_2/BIZREF_3 and falls back through both on every live cover-sheet
-  // print, contradicting export_xlsx.py's glasslist reading of M. Checked
-  // anyway: exact-match only, so a wrong guess here can't misfire.
+  // (index 13) with D still blank. M (index 12) is the glass-list checkbox
+  // (Angus, 2026-10-05): reading it as a ref gave 14 jobs the ref "false"/
+  // "true", which then matched every unticked row.
   assert.match(source, /getRange\(DATA_START_ROW, 1, last - DATA_START_ROW \+ 1, 23\)/);
   assert.match(source, /getRange\(DATA_START_ROW, 1, count, 23\)/);
-  const findRow = source.slice(source.indexOf("function _findRow_"));
-  assert.match(findRow, /keys\[i\]\[3\]/);
-  assert.match(findRow, /keys\[i\]\[12\]/);
-  assert.match(findRow, /keys\[i\]\[13\]/);
-  assert.match(findRow, /keys\[i\]\[22\]/);
+  const findRow = source.slice(source.indexOf("function _findRow_"), source.indexOf("function _isPlannerTab_"));
+  assert.match(findRow, /keys\[j\]\[3\]/);
+  assert.match(findRow, /keys\[j\]\[13\]/);
+  assert.match(findRow, /keys\[j\]\[22\]/);
+  assert.doesNotMatch(source, /\[12\]\) ===|mRef/);
+  assert.match(source, /glasslist: String\(r\[12\]\)/);
+  // Task number is matched across the whole tab before any ref fallback.
+  assert.ok(findRow.indexOf("keys[i][0]") < findRow.indexOf("keys[j][3]"));
 });
