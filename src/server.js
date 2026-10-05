@@ -9,6 +9,9 @@ const { STATIONS, applyCascade, norm } = require("./cascade");
 const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
 const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
+const { createBoard } = require("./stationBoard");
+const { getWip } = require("./wipTv");
+const crypto = require("node:crypto");
 const {
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
   fetchSheetJobs, fetchSheetCapabilities, sheetEnabled, sheetHealth,
@@ -35,6 +38,26 @@ let redoBridgeReady = false;
 let sheetCheckedAt = null; // last time Google actually answered a capability check
 const redoInFlight = new Set();
 const COVER_ADMIN_HASH = 6454293043924497;
+const jobUpdates = new Set();
+const foremanSessions = new Map();
+const loginAttempts = new Map();
+function adminHash(str) {
+  let h1=0xdeadbeef,h2=0x41c6ce57;
+  for (let i=0;i<str.length;i++) { h1=Math.imul(h1^str.charCodeAt(i),2654435761); h2=Math.imul(h2^str.charCodeAt(i),1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return 4294967296*(2097151&h2)+(h1>>>0);
+}
+function foreman(req) {
+  const token = /(?:^|;\s*)foreman=([a-f0-9]+)/.exec(req.headers.cookie || "")?.[1];
+  return token && (foremanSessions.get(token) || 0) > Date.now();
+}
+async function withJobLock(id, work) {
+  id=Number(id);
+  if (jobUpdates.has(id)) throw Error("This job is being updated; wait and refresh");
+  jobUpdates.add(id);
+  try { return await work(); } finally { jobUpdates.delete(id); }
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -352,6 +375,9 @@ function applyJobChanges(job, changes, actor, source) {
 }
 
 async function updateStation(body) {
+  return withJobLock(body.jobId, () => updateStationUnlocked(body));
+}
+async function updateStationUnlocked(body) {
   const { jobId, station, value, actor, source } = body;
   const job = getJob(jobId);
   if (!job) return { error: "Job not found" };
@@ -488,11 +514,54 @@ function listIssues(ref) {
   ).all(bizRef);
 }
 
+const board = createBoard(db, {
+  live: async job => {
+    const rows = await fetchSheetJobs({ ref:job.task_no || job.biz_ref });
+    const row=rows.find(r=>r.task_no===job.task_no && r.source_tab===job.source_tab);
+    return row ? { ...row,id:job.id } : null;
+  },
+  push:pushStationUpdateConfirmed,
+  apply:writeJobChanges,
+});
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
 
   try {
+    if (p.startsWith("/api/board/") && req.method === "POST" &&
+        (req.headers["content-type"]?.split(";")[0] !== "application/json" ||
+         (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host))) {
+      return json(res,403,{error:"Board changes must come from this Factory Terminal"});
+    }
+    if (process.env.PLANNER_PREVIEW === "1" && req.method !== "GET" && !["/api/board/allocate","/api/board/login"].includes(p)) {
+      return json(res,403,{error:"Review preview: production writes are disabled"});
+    }
+    if (p === "/api/board/login" && req.method === "POST") {
+      const key=req.socket.remoteAddress, previous=loginAttempts.get(key);
+      const attempt=previous && Date.now()-previous.at<60000 ? previous : {at:Date.now(),n:0};
+      loginAttempts.set(key,attempt);
+      if (++attempt.n>5) return json(res,429,{error:"Too many attempts. Wait one minute."});
+      const body=await readBody(req);
+      if (typeof body.password!=="string" || body.password.length>100 || adminHash(body.password)!==COVER_ADMIN_HASH) return json(res,403,{error:"Wrong admin password"});
+      const token=crypto.randomBytes(32).toString("hex");
+      foremanSessions.set(token,Date.now()+8*60*60e3);
+      res.setHeader("Set-Cookie",`foreman=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
+      return json(res,200,{ok:true});
+    }
+    if (p === "/api/board" && req.method === "GET") {
+      const state=await getWip();
+      if (!state.snapshot) return json(res,503,{error:state.error || "WIP TV is loading"});
+      return json(res,200,{...board.list(url.searchParams.get("station"),state.snapshot),wipReadAt:state.checkedAt,wipError:state.error,wipStale:state.stale,foreman:!!foreman(req),preview:process.env.PLANNER_PREVIEW==="1"});
+    }
+    if (["/api/board/allocate","/api/board/change"].includes(p) && req.method === "POST") {
+      const state=await getWip();
+      if (!state.snapshot || state.error || state.stale) return json(res,409,{error:"Refresh WIP TV successfully before changing this board"});
+      const body=await readBody(req);
+      const result=p.endsWith("allocate") ? board.manage(body,state.snapshot,!!foreman(req))
+        : await withJobLock(body.jobId,()=>board.change(body,state.snapshot));
+      broadcast("job-updated",{jobId:body.jobId,applied:[]});
+      return json(res,200,result);
+    }
     if (p === "/api/stations") {
       return json(res, 200, STATIONS);
     }
@@ -589,6 +658,7 @@ const server = http.createServer(async (req, res) => {
     if (/^\/station\/\d+$/.test(p)) file = "/station.html";
     if (p === "/dashboard") file = "/dashboard.html";
     if (p === "/manager" || p === "/control") file = "/manager.html";
+    if (/^\/board\/(4|5|8)$/.test(p) || p === "/foreman-board") file = "/station-board.html";
     if (p === "/office") file = "/office.html";
     if (p === "/station-log") file = "/station-log.html";
     const full = path.join(PUBLIC_DIR, path.normalize(file));

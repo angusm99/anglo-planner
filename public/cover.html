@@ -125,6 +125,7 @@
   <section class="actions">
     <div id="message" class="message"></div>
     <button id="start" type="button">START NORMAL OPERATION</button>
+    <button id="jobBoard" type="button" hidden>THREE-DAY JOB BOARD</button>
     <button id="admin" class="admin" type="button">ADMIN / NORMAL TABLET MODE</button>
   </section>
 </main>
@@ -139,6 +140,10 @@ const params = new URLSearchParams(location.search);
 const station = Number(params.get("station") || 0);
 const cover = STATION_COVERS[station] || { name: "UNKNOWN", operator: "Check label" };
 const target = `/station/${station}`;
+if ([4,5,8].includes(Number(station))) {
+  document.getElementById("jobBoard").hidden = false;
+  document.getElementById("jobBoard").onclick = () => location.href = `/board/${station}`;
+}
 
 try {
   if (STATION_COVERS[station]) {
