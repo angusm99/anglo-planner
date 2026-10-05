@@ -7,3 +7,36 @@ test('primary operators enter boards, guests and regular updates stay on the ori
  const cover=fs.readFileSync('public/cover.html','utf8');assert.match(cover,/location.href = "\/foreman-board"/);assert.doesNotMatch(cover,/id="jobBoard"/);
  const board=fs.readFileSync('public/station-board.js','utf8');assert.doesNotMatch(board,/"WIP TV: "/);assert.match(board,/select.value=selected.get/);
 });
+test('dashboard connection colours and day bars reflect health and actual station completion',()=>{
+ const vm=require('node:vm');
+ class Element {
+  constructor(){this.children=[];this.style={};this.dataset={};this.attributes={};this.value='';}
+  append(...children){this.children.push(...children);}
+  replaceChildren(...children){this.children=children;}
+  setAttribute(k,v){this.attributes[k]=v;}
+  addEventListener(){}
+ }
+ for(const station of [4,5,8]){
+  const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},createElement:()=>new Element(),querySelectorAll:()=>[]};
+  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>new Promise(()=>{}),AbortSignal,setInterval:()=>{}});
+  vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
+  const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
+  const completed=station===8?'BEADS+GLASS':'DONE';
+  for(const [statuses,percent]of [[['QUEUED','QUEUED'],0],[[completed,'QUEUED'],50],[[completed,completed],100],[[],0]]){
+   data.jobs=statuses.map((status,i)=>({id:i+1,day:'TODAY',status,biz_ref:`D${i}`,customer:'Customer',source:'WIP TV',units:1}));
+   vm.runInContext(`board=${JSON.stringify(data)};config={buttons:['DONE'],defaultStatus:'DONE'};render();`,context);
+   const bar=elements.get('days').children[0].children[1];
+   assert.equal(bar.attributes['aria-valuenow'],String(percent));
+   assert.equal(bar.style.backgroundColor,statuses.length?`hsl(${percent*1.2} 65% 25%)`:'#343125');
+   assert.equal(elements.get('notice').className,'connected');
+   if(statuses.length)assert.doesNotMatch(elements.get('days').children[0].children[2].children[1].children[0].textContent,/WIP TV/);
+  }
+  for(const health of ['degraded','checking']){
+   data.connection.health.status=health;
+   vm.runInContext(`board=${JSON.stringify(data)};render();`,context);
+   assert.equal(elements.get('notice').className,'disconnected');
+  }
+  assert.equal(elements.get('stationNumber').textContent,`STATION ${station}`);
+  assert.equal(elements.get('title').textContent,'SAW 2');
+ }
+});
