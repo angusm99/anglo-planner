@@ -89,12 +89,12 @@ test("Sheet reads retry transient errors, preserve last success, flag stale data
     assert.equal(await sheet.fetchSheetCapabilities(), null);
     assert.match(sheet.sheetHealth().capabilities.lastError, /redacted/);
     assert.doesNotMatch(messages.join("\n"), /secret-never-log|private job/);
-    assert.match(messages.join("\n"), /HTTP 503; type=text\/html; bytes=/);
+    assert.match(messages.join("\n"), /HTTP 503; hop=\w+; type=text\/html; bytes=/);
     responses.push({ body: JSON.stringify({ ok: true, jobs: {} }) });
     assert.deepEqual(await sheet.fetchSheetJobs({ ref: "D1" }), []);
     // An HTTP error must never be accepted as a confirmed save, even if its
     // body resembles a successful response. No real Sheet writes occur here.
-    for (let i = 0; i < 3; i++) responses.push({ status: 503, body: '{"ok":true}' });
+    responses.push({ status: 503, body: '{"ok":true}' });
     assert.equal(await sheet.pushStationUpdateConfirmed(
       { source_tab: "SEPTEMBER-2026", biz_ref: "D1" }, [{ field: "s4", to: "DONE" }]
     ), false);

@@ -1,6 +1,15 @@
 "use strict";
 const test=require("node:test"), assert=require("node:assert/strict"), {DatabaseSync}=require("node:sqlite");
 const {createBoard,parseWip}=require("../src/stationBoard");
+test("direct master lookup reads the exact job and rejects missing or duplicate identities",()=>{
+ const {masterStatus}=require("../src/wipTv");
+ const row=Array(23).fill("");row[0]="549355";row[3]="D3128";row[18]="done";row[21]="queue out";
+ const job={id:1566,task_no:"549355",biz_ref:"D3128",source_tab:"SEPTEMBER-2026"};
+ assert.equal(masterStatus(job,[row]).s5,"DONE");assert.equal(masterStatus(job,[row]).job_status,"QUEUE OUT");
+ assert.throws(()=>masterStatus(job,[]),/missing or duplicated/);
+ assert.throws(()=>masterStatus(job,[row,row]),/missing or duplicated/);
+ assert.equal(masterStatus({...job,task_no:""},[row]).id,1566);
+});
 test("station board allocation, acknowledged cascade, and safe undo",async()=>{
  const db=new DatabaseSync(":memory:");
  db.exec("CREATE TABLE jobs(id INTEGER PRIMARY KEY,task_no TEXT,source_tab TEXT,s1 TEXT,s3 TEXT,s4 TEXT,s5 TEXT,s6 TEXT,s7 TEXT,job_status TEXT); CREATE TABLE events(id INTEGER PRIMARY KEY,job_id INTEGER,field TEXT); INSERT INTO jobs VALUES(1,'100','OCTOBER','QUEUED','PICK TROLLEY','JOB PICKED','W.I.P','QUEUED','QUEUED','GLASS READY'),(2,'200','OCTOBER','','','','','','','');");

@@ -39,7 +39,9 @@ function safeError(error) {
 
 function responseJson(response) {
   const type = String(response.headers["content-type"] || "unknown").replace(/[^\w/;= .-]/g, "").slice(0, 80);
-  const detail = `HTTP ${response.status}; type=${type}; bytes=${Buffer.byteLength(response.body)}`;
+  let hop = "unknown";
+  try { hop = new URL(response.url).host === new URL(URL_STR).host ? "deployment" : "redirect"; } catch {}
+  const detail = `HTTP ${response.status}; hop=${hop}; type=${type}; bytes=${Buffer.byteLength(response.body)}`;
   if (response.status < 200 || response.status >= 300) {
     const error = new Error(detail);
     // A 404 on Apps Script's one-shot redirect target (googleusercontent echo
@@ -161,6 +163,8 @@ async function post(urlStr, data) {
 async function get(params, timeoutMs = REQUEST_TIMEOUT_MS, totalTimeoutMs = timeoutMs) {
   const u = new URL(URL_STR);
   u.searchParams.set("token", TOKEN);
+  // Each read needs a fresh ContentService response, never a reused echo URL.
+  u.searchParams.set("request", require("node:crypto").randomUUID());
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
   const deadline = Date.now() + totalTimeoutMs;
   const response = await requestText(u, {}, null, timeoutMs);
@@ -207,22 +211,22 @@ async function fetchSheetCapabilities() {
 
 const sheetEnabled = () => Boolean(URL_STR);
 
-async function postConfirmed(payload, label) {
+async function postConfirmed(payload, label, attempts = 3) {
   if (!URL_STR || !payload) return false;
   const body = { ...payload, token: TOKEN };
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const response = await post(URL_STR, body);
       const parsed = responseJson(response);
       if (parsed?.ok === true) return true;
-      if (attempt === 2) {
+      if (attempt === attempts - 1) {
         const detail = parsed?.error ? `: ${safeError(parsed.error)}` : "";
         console.error(`[sheet] ${label} not confirmed (${response.status})${detail}`);
       }
     } catch (e) {
-      if (attempt === 2) console.error(`[sheet] ${label} failed: ${safeError(e)}`);
+      if (attempt === attempts - 1) console.error(`[sheet] ${label} failed: ${safeError(e)}`);
     }
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
   }
   return false;
 }
@@ -232,7 +236,8 @@ function pushIssueLog(issue) {
 }
 
 function pushStationUpdateConfirmed(job, applied) {
-  return postConfirmed(buildPayload(job, applied), "station update");
+  // A lost acknowledgement can follow a completed write. Never replay it.
+  return postConfirmed(buildPayload(job, applied), "station update", 1);
 }
 
 function pushRepickDone(job, issue) {

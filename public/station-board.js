@@ -6,7 +6,13 @@ const saveResults=new Map();
 const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):["DONE","DONE-NO PW"].includes(s);
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
-async function api(url,body){const r=await fetch(url,body?{signal:AbortSignal.timeout(180000),method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{signal:AbortSignal.timeout(30000)});const v=await r.json();if(!r.ok)throw Error(v.error||"Request failed");return v;}
+async function api(url,body){
+ const controller=new AbortController();let timer;
+ try{return await Promise.race([
+  (async()=>{const r=await fetch(url,{signal:controller.signal,...(body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{})});const v=await r.json();if(!r.ok)throw Error(v.error||"Request failed");return v;})(),
+  new Promise((_,reject)=>{timer=setTimeout(()=>{reject(Error(body?"Save response timed out; refresh and check the master Sheet before retrying":"Server response timed out"));controller.abort();},body?90000:30000);})
+ ]);}finally{clearTimeout(timer);}
+}
 function actor(){const a=$("actor").value.trim();if(!a)throw Error("Type your name before making a change");return a;}
 async function act(body){
  if(saveResults.get(body.jobId)?.state==="saving")return;

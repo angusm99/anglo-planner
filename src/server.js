@@ -10,7 +10,7 @@ const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
 const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
 const { createBoard } = require("./stationBoard");
-const { getWip } = require("./wipTv");
+const { getWip,readMasterStatus } = require("./wipTv");
 const crypto = require("node:crypto");
 const {
   pushStationUpdateConfirmed, pushIssueLog, pushRepickDone,
@@ -515,12 +515,13 @@ function listIssues(ref) {
 }
 
 const board = createBoard(db, {
-  live: async job => {
-    const rows = await fetchSheetJobs({ ref:job.task_no || job.biz_ref });
-    const row=rows.find(r=>r.task_no===job.task_no && r.source_tab===job.source_tab);
-    return row ? { ...row,id:job.id } : null;
+  live: readMasterStatus,
+  push:async (job,changes) => {
+    if (await pushStationUpdateConfirmed(job,changes)) return true;
+    // Reconcile an ambiguous acknowledgement by reading, never resending.
+    const current=await readMasterStatus(job);
+    return changes.every(c=>norm(current[c.field])===norm(c.to));
   },
-  push:pushStationUpdateConfirmed,
   apply:writeJobChanges,
 });
 const server = http.createServer(async (req, res) => {

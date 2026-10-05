@@ -19,7 +19,8 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
  for(const station of [4,5,8]){
   const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},createElement:()=>new Element(),querySelectorAll:()=>[]};
   let response=null,requests=0;
-  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortSignal,setInterval:()=>{}});
+  let expire;
+  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortController,setTimeout:f=>{expire=f;return 0;},clearTimeout:()=>{},setInterval:()=>{}});
   vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
   const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
   const completed=station===8?'BEADS+GLASS':'DONE';
@@ -60,5 +61,10 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
   assert.equal(requests,previousRequests);
   finish({ok:true});await pending;
   assert.equal(vm.runInContext('saveResults.get(1).state',context),'saved');
+  response=null;
+  const stalled=vm.runInContext('act({jobId:1,value:"DONE"})',context);
+  expire();await stalled;
+  assert.equal(vm.runInContext('saveResults.get(1).state',context),'failed');
+  assert.match(vm.runInContext('saveResults.get(1).message',context),/timed out; refresh and check/);
  }
 });
