@@ -2,12 +2,26 @@
 const $=id=>document.getElementById(id), master=location.pathname==="/foreman-board";
 const station=Number(master?new URLSearchParams(location.search).get("station")||4:location.pathname.split("/").pop());
 let board, config, loading=false, editing=null;
+const saveResults=new Map();
 const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):["DONE","DONE-NO PW"].includes(s);
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 async function api(url,body){const r=await fetch(url,body?{signal:AbortSignal.timeout(180000),method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{signal:AbortSignal.timeout(30000)});const v=await r.json();if(!r.ok)throw Error(v.error||"Request failed");return v;}
 function actor(){const a=$("actor").value.trim();if(!a)throw Error("Type your name before making a change");return a;}
-async function act(body){try{body.station=station;body.actor=actor();await api("/api/board/"+(body.action?"allocate":"change"),body);await load();}catch(e){$("notice").textContent=e.message;}}
+async function act(body){
+ if(saveResults.get(body.jobId)?.state==="saving")return;
+ try{
+  body.station=station;body.actor=actor();
+  saveResults.set(body.jobId,{state:"saving",message:"SAVING…"});render();
+  const result=await api("/api/board/"+(body.action?"allocate":"change"),body);
+  saveResults.set(body.jobId,{state:result.message?"unchanged":"saved",message:result.message?"UNCHANGED · "+result.message:`${body.action?"ALLOCATION SAVED":"SAVED TO SHEET"} · ${new Date().toLocaleTimeString()}`});
+  await load();render();
+ }catch(e){
+  saveResults.set(body.jobId,{state:"failed",message:"NOT CONFIRMED · "+e.message});
+  if(board)render();
+  $("notice").className="disconnected";$("notice").textContent=e.message;
+ }
+}
 function render(){
  $("add").disabled=false;
  const selected=new Map([...document.querySelectorAll('select[data-job]')].map(n=>[n.dataset.job,n.value]));
@@ -31,9 +45,12 @@ function render(){
  bar.setAttribute("role","progressbar");bar.setAttribute("aria-label",`${day}: completed jobs`);bar.setAttribute("aria-valuemin","0");bar.setAttribute("aria-valuemax","100");bar.setAttribute("aria-valuenow",String(percent));section.append(bar);
  if(!rows.length)section.append(el("p","No jobs allocated."));
  for(const j of rows){const row=el("article",undefined,"job");row.append(el("div",j.biz_ref||j.task_no,"ref"));const info=el("div",j.customer);info.append(el("div",`${j.colour||""} · ${j.units??""} units${j.source==="WIP TV"?"":" · "+j.source}${j.issuer?" · Issued by "+j.issuer:""}${j.note?" · "+j.note:""}`,"detail"));row.append(info);const status=el("div",j.status||"QUEUED","status "+(done(j.status)?"done":issue(j.status)?"problem":""));row.append(status);const controls=el("div",undefined,"controls");const select=el("select");select.setAttribute("aria-label","Status for "+(j.biz_ref||j.task_no));for(const v of config.buttons.filter(v=>v!=="REDO")){const o=el("option",v);o.value=v;select.append(o);}select.dataset.job=String(j.id);select.value=selected.get(String(j.id))||config.defaultStatus;
- const save=el("button","CONFIRM");save.disabled=!j.id||board.preview||board.wipStale||!!board.wipError;save.onclick=async()=>{try{const a=actor();if(confirm(`${a}: set ${j.biz_ref||j.task_no} to ${select.value}? Normal production cascade applies.`)){save.disabled=true;await act({jobId:j.id,value:select.value});}}catch(e){$("notice").textContent=e.message;}};controls.append(select,save);
+ const result=saveResults.get(j.id);
+ select.disabled=result?.state==="saving";
+ const save=el("button","CONFIRM");save.disabled=!j.id||board.preview||board.wipStale||!!board.wipError||result?.state==="saving";save.onclick=async()=>{try{const a=actor();if(confirm(`${a}: set ${j.biz_ref||j.task_no} to ${select.value}? Normal production cascade applies.`)){save.disabled=true;await act({jobId:j.id,value:select.value});}}catch(e){$("notice").className="disconnected";$("notice").textContent=e.message;}};controls.append(select,save);
  if(j.undoId){const undo=el("button","Unconfirm");undo.disabled=save.disabled;undo.onclick=()=>{if(confirm("Restore the previous status and this confirmation's cascade changes? Later changes will block undo."))act({jobId:j.id,undoId:j.undoId});};controls.append(undo);}
- if(master&&board.foreman){const edit=el("button","Edit allocation");edit.onclick=()=>openAllocation(j);const remove=el("button","Remove");remove.onclick=()=>{if(confirm("Remove this job from this station board?"))act({action:"remove",jobId:j.id});};controls.append(edit,remove);}
+ if(master&&board.foreman){const edit=el("button","Edit allocation");edit.disabled=result?.state==="saving";edit.onclick=()=>openAllocation(j);const remove=el("button","Remove");remove.disabled=result?.state==="saving";remove.onclick=()=>{if(confirm("Remove this job from this station board?"))act({action:"remove",jobId:j.id});};controls.append(edit,remove);}
+ if(result){const message=el("div",result.message,"save-result "+result.state);message.setAttribute("role","status");controls.append(message);}
  if(!j.id)controls.append(el("span","Master job unavailable; ask foreman","problem"));row.append(controls);section.append(row);}$("days").append(section);}
 }
 async function load(){if(loading)return;loading=true;try{if(!config)config=(await api("/api/stations"))[station];const [list,connection]=await Promise.all([api("/api/board?station="+station),api("/api/capabilities")]);board={...list,connection};render();}catch(e){$("notice").className="disconnected";$("notice").textContent="Disconnected · "+e.message;}finally{loading=false;}}

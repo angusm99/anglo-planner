@@ -7,7 +7,7 @@ test('primary operators enter boards, guests and regular updates stay on the ori
  const cover=fs.readFileSync('public/cover.html','utf8');assert.match(cover,/location.href = "\/foreman-board"/);assert.doesNotMatch(cover,/id="jobBoard"/);
  const board=fs.readFileSync('public/station-board.js','utf8');assert.doesNotMatch(board,/"WIP TV: "/);assert.match(board,/select.value=selected.get/);
 });
-test('dashboard connection colours and day bars reflect health and actual station completion',()=>{
+test('dashboard connection colours, completion bars and save outcomes reflect actual responses',async()=>{
  const vm=require('node:vm');
  class Element {
   constructor(){this.children=[];this.style={};this.dataset={};this.attributes={};this.value='';}
@@ -18,7 +18,8 @@ test('dashboard connection colours and day bars reflect health and actual statio
  }
  for(const station of [4,5,8]){
   const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},createElement:()=>new Element(),querySelectorAll:()=>[]};
-  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>new Promise(()=>{}),AbortSignal,setInterval:()=>{}});
+  let response=null,requests=0;
+  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortSignal,setInterval:()=>{}});
   vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
   const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
   const completed=station===8?'BEADS+GLASS':'DONE';
@@ -38,5 +39,26 @@ test('dashboard connection colours and day bars reflect health and actual statio
   }
   assert.equal(elements.get('stationNumber').textContent,`STATION ${station}`);
   assert.equal(elements.get('title').textContent,'SAW 2');
+  data.jobs=[{id:1,day:'TODAY',status:completed,biz_ref:'D1',source:'WIP TV',units:1}];
+  vm.runInContext(`board=${JSON.stringify(data)};render();`,context);
+  elements.get('actor').value='Operator';
+  response={ok:true,json:async()=>({ok:true,message:'Already at that status; nothing changed'})};
+  await vm.runInContext('act({jobId:1,value:"DONE"})',context);
+  assert.equal(vm.runInContext('saveResults.get(1).state',context),'unchanged');
+  assert.match(vm.runInContext('saveResults.get(1).message',context),/^UNCHANGED/);
+  response={ok:false,json:async()=>({error:'Sheet did not confirm'})};
+  await vm.runInContext('act({jobId:1,value:"DONE"})',context);
+  assert.equal(vm.runInContext('saveResults.get(1).state',context),'failed');
+  assert.equal(elements.get('notice').className,'disconnected');
+  let finish;
+  response={ok:true,json:()=>new Promise(resolve=>{finish=resolve;})};
+  const pending=vm.runInContext('act({jobId:1,value:"DONE"})',context);
+  vm.runInContext('render()',context);
+  assert.equal(elements.get('days').children[0].children[2].children[3].children[1].disabled,true);
+  const previousRequests=requests;
+  await vm.runInContext('act({jobId:1,value:"DONE"})',context);
+  assert.equal(requests,previousRequests);
+  finish({ok:true});await pending;
+  assert.equal(vm.runInContext('saveResults.get(1).state',context),'saved');
  }
 });
