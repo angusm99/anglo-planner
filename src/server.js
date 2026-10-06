@@ -676,7 +676,7 @@ const server = http.createServer(async (req, res) => {
     if (/^\/station\/\d+$/.test(p)) file = "/station.html";
     if (p === "/dashboard") file = "/dashboard.html";
     if (p === "/manager" || p === "/control") file = "/manager.html";
-    if (/^\/board\/(4|5|8)$/.test(p) || p === "/foreman-board") file = "/station-board.html";
+    if (/^\/board\/(4|5|6|8)$/.test(p) || p === "/foreman-board") file = "/station-board.html";
     if (p === "/office") file = "/office.html";
     if (p === "/station-log") file = "/station-log.html";
     const full = path.join(PUBLIC_DIR, path.normalize(file));

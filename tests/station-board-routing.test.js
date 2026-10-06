@@ -18,14 +18,14 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
   setAttribute(k,v){this.attributes[k]=v;}
   addEventListener(){}
  }
- for(const station of [4,5,8]){
+ for(const station of [4,5,6,8]){
   const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},createElement:()=>new Element(),querySelectorAll:()=>[]};
   let response=null,requests=0;
   let expire;
   const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortController,setTimeout:f=>{expire=f;return 0;},clearTimeout:()=>{},setInterval:()=>{}});
   vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
   const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
-  const completed=station===8?'BEADS+GLASS':'DONE';
+  const completed=station===8?'BEADS+GLASS':station===6?'ALL DONE':'DONE';
   for(const [statuses,percent]of [[['QUEUED','QUEUED'],0],[[completed,'QUEUED'],50],[[completed,completed],100],[[],0]]){
    data.jobs=statuses.map((status,i)=>({id:i+1,day:'TODAY',status,biz_ref:`D${i}`,customer:'Customer',source:'WIP TV',units:1}));
    vm.runInContext(`board=${JSON.stringify(data)};config={buttons:['DONE'],defaultStatus:'DONE'};render();`,context);

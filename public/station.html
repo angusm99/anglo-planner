@@ -287,7 +287,7 @@ async function confirmOperator(name, type) {
   localStorage.setItem(`anglo-operator-${stationNum}`, JSON.stringify({ name: clean, type }));
   $("stWho").textContent = `Operator: ${clean}`;
   $("changeOperator").style.display = "inline-block";
-  $("scheduleBtn").style.display = [4,5,8].includes(stationNum) ? "inline-block" : "none";
+  $("scheduleBtn").style.display = [4,5,6,8].includes(stationNum) ? "inline-block" : "none";
   $("operatorView").style.display = "none";
   $("scanView").style.display = "block";
   renderQueueList();
@@ -299,7 +299,7 @@ async function confirmOperator(name, type) {
 }
 
 function openSchedule() {
-  if (!operatorName || ![4,5,8].includes(stationNum)) return;
+  if (!operatorName || ![4,5,6,8].includes(stationNum)) return;
   sessionStorage.setItem(`board-operator-${stationNum}`,operatorName);
   location.href = `/board/${stationNum}`;
 }

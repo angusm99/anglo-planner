@@ -1,6 +1,6 @@
 "use strict";
 const { STATIONS, applyCascade, norm } = require("./cascade");
-const SUPPORTED = [4, 5, 8];
+const SUPPORTED = [4, 5, 6, 8];
 
 function parseWip(values) {
   const days = [], jobs = [];
@@ -30,7 +30,7 @@ function createBoard(db, deps) {
     id INTEGER PRIMARY KEY, station INTEGER NOT NULL, job_id INTEGER NOT NULL,
     actor TEXT NOT NULL, changes TEXT NOT NULL, event_id INTEGER NOT NULL DEFAULT 0, undone INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT(datetime('now','localtime')));`);
-  const station = n => { n = Number(n); if (!SUPPORTED.includes(n)) throw Error("Only stations 4, 5 and 8 are supported"); return n; };
+  const station = n => { n = Number(n); if (!SUPPORTED.includes(n)) throw Error("Only stations 4, 5, 6 and 8 are supported"); return n; };
   const actor = a => { a = String(a || "").trim(); if (!a || a.length > 100) throw Error("Enter the operator's name"); return a; };
   const getJob = id => db.prepare("SELECT * FROM jobs WHERE id=?").get(Number(id));
   const audit = (s,id,action,a,details) => db.prepare("INSERT INTO station_board_audit(station,job_id,action,actor,details) VALUES(?,?,?,?,?)").run(s,id,action,a,JSON.stringify(details));

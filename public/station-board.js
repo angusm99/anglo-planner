@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id), master=location.pathname==="/foreman-bo
 const station=Number(master?new URLSearchParams(location.search).get("station")||4:location.pathname.split("/").pop());
 let board, config, loading=false, editing=null;
 const saveResults=new Map();
-const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):["DONE","DONE-NO PW"].includes(s);
+const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):(station===6?["ALL DONE","DONE-NO PW"]:["DONE","DONE-NO PW"]).includes(s);
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 async function api(url,body){
