@@ -8,6 +8,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# A click in this window turns on console "Select" (QuickEdit) mode, which
+# pauses every program writing to it - the launcher, then node's logging -
+# until the selection is cleared, so the server silently stops answering
+# (2026-10-06). Turn QuickEdit off for this console; node inherits it.
+try {
+  Add-Type -Namespace AngloPlanner -Name ConsoleMode -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int handle);
+[DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+[DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr handle, uint mode);
+'@
+  $stdin = [AngloPlanner.ConsoleMode]::GetStdHandle(-10)
+  $mode = 0
+  if ([AngloPlanner.ConsoleMode]::GetConsoleMode($stdin, [ref]$mode)) {
+    # Clear ENABLE_QUICK_EDIT_MODE (0x40); ENABLE_EXTENDED_FLAGS (0x80) makes it stick.
+    [void][AngloPlanner.ConsoleMode]::SetConsoleMode($stdin, ($mode -band (-bnot 0x40)) -bor 0x80)
+  }
+} catch {
+  Write-Host "Could not turn off console Select mode; avoid clicking in this window." -ForegroundColor DarkYellow
+}
+
 $Repo = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location -LiteralPath $Repo
 
