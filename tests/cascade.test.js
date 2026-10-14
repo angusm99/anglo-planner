@@ -26,6 +26,13 @@ test("S3 DONE marks both saws picked", () => {
   assert.deepStrictEqual(c, { s3: "DONE", s4: "JOB PICKED", s5: "JOB PICKED" });
 });
 
+test("S3 DONE / SASH PICKED never overwrite a saw that is already DONE", () => {
+  const job = { ...blank, s4: "DONE", s5: "DONE-NO PW" };
+  assert.deepStrictEqual(applyCascade(job, 3, "DONE"), { s3: "DONE" });
+  assert.deepStrictEqual(applyCascade(job, 3, "SASH PICKED"), { s3: "SASH PICKED" });
+  assert.deepStrictEqual(applyCascade({ ...blank, s4: "DONE" }, 3, "DONE"), { s3: "DONE", s5: "JOB PICKED" });
+});
+
 test("S3 PICK SHORT flags saw 1 short", () => {
   const c = applyCascade(blank, 3, "PICK SHORT");
   assert.deepStrictEqual(c, { s3: "PICK SHORT", s4: "PICK SHORT" });

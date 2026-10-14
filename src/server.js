@@ -221,24 +221,34 @@ function upsertSheetJob(r) {
   return Number(upsertInsert.run(...vals).lastInsertRowid);
 }
 
-// ponytail: upsert-only — rows deleted from the sheet linger in the cache
-// until archived in /office. Add delete-sync if that ever actually bites.
+// Rows that left the sheet (e.g. moved from JOBS IN QUEUE to a month tab) are
+// deactivated after a complete direct read, so stale copies stop showing
+// (D3272: an old queue row kept reporting PICK SHORT after the job was DONE).
+const MIN_FULL_READ = 500; // guard: never prune on a suspiciously small read
 async function refreshFromSheet() {
-  let jobs;
-  try { jobs=await readMasterJobs();fullReadConfirmed(); }
+  let jobs, complete = false;
+  try { jobs=await readMasterJobs();fullReadConfirmed();complete=true; }
   catch (_) {
     console.error("[sheet] direct master read failed; trying bridge and keeping previous cache on failure");
     jobs=await fetchSheetJobs({ all: "1" });
   }
   if (!jobs.length) return 0;
   let applied = 0;
+  const seen = new Set();
   for (const r of jobs) {
     try {
-      upsertSheetJob(r);
+      seen.add(upsertSheetJob(r));
       applied++;
     } catch (err) {
       console.error(`[sheet] skipped bad row (task ${r?.task_no || "?"}): ${err.message}`);
     }
+  }
+  if (complete && applied === jobs.length && applied >= MIN_FULL_READ) {
+    const stale = db.prepare("SELECT id FROM jobs WHERE active = 1 AND source_tab <> 'OFFICE'").all()
+      .filter((x) => !seen.has(x.id));
+    const off = db.prepare("UPDATE jobs SET active = 0, updated_at = datetime('now','localtime') WHERE id = ?");
+    for (const x of stale) off.run(x.id);
+    if (stale.length) console.log(`[sheet] deactivated ${stale.length} rows no longer in the sheet`);
   }
   console.log(`[sheet] cache refreshed: ${applied} jobs`);
   broadcast("job-updated", { jobId: null, applied: [] }); // nudge dashboards

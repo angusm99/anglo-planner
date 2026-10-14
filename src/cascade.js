@@ -22,6 +22,7 @@ const STATIONS = {
 const REDO_VALUE = "REDO";
 const QUEUE_VALUES = ["", "QUEUED", "QUEUE OUT", "0"];
 const S1_SETTLED = ["DONE", "DONE-NO PW", "RC-X", "CHANGES"];
+const SAW_DONE = ["DONE", "DONE-NO PW"];
 
 function norm(v) {
   return String(v == null ? "" : v).toUpperCase().trim();
@@ -94,11 +95,14 @@ function applyCascade(job, stationNum, rawValue) {
   }
 
   if (stationNum === 3) {
-    if (value === "PICK TROLLEY") set("s4", "JOB PICKED");
-    else if (value === "SASH PICKED") set("s5", "JOB PICKED");
+    // Pickers often update after the saw has already cut: never knock a
+    // finished saw back to JOB PICKED.
+    const picked = (key) => { if (!SAW_DONE.includes(get(key))) set(key, "JOB PICKED"); };
+    if (value === "PICK TROLLEY") picked("s4");
+    else if (value === "SASH PICKED") picked("s5");
     else if (value === "PICK SHORT") set("s4", "PICK SHORT");
     else if (value === "SASH SHORT") set("s5", "PICK SHORT");
-    else if (value === "DONE") { set("s4", "JOB PICKED"); set("s5", "JOB PICKED"); }
+    else if (value === "DONE") { picked("s4"); picked("s5"); }
     return changes;
   }
 
