@@ -10,16 +10,7 @@ const QUEUE_STATUSES = new Set([
   "ALLOCATED", "PICK TROLLEY", "SASH PICKED",
 ]);
 
-const STATION_COMPLETE = {
-  1: new Set(["DONE", "DONE-NO PW"]),
-  2: new Set(["DONE", "DONE-NO PW", "ALL DLVD", "CUTPLAN RUN"]),
-  3: new Set(["DONE", "DONE-NO PW"]),
-  4: new Set(["DONE", "DONE-NO PW"]),
-  5: new Set(["DONE", "DONE-NO PW"]),
-  6: new Set(["ALL DONE", "DONE-NO PW"]),
-  7: new Set(["DONE", "DONE-NO PW", "DELIVERED", "SLATTED UNITS"]),
-  8: new Set(["DONE", "BEADS DONE", "FRAMES+BEADS", "BEADS+FRAMES", "BEADS+GLASS", "ALL READY"]),
-};
+const { stationIsComplete } = require("../public/station-status");
 
 const MANAGER_INSTRUCTIONS_CONTRACT = Object.freeze({
   enabled: false,
@@ -102,10 +93,6 @@ function freshnessFor(lastEventAt, now = new Date()) {
   if (ageMinutes > 240) return { state: "red", ageMinutes };
   if (ageMinutes > 90) return { state: "amber", ageMinutes };
   return { state: "fresh", ageMinutes };
-}
-
-function stationIsComplete(stationNum, value) {
-  return STATION_COMPLETE[stationNum]?.has(norm(value)) || false;
 }
 
 function stationHasLoad(stationNum, value) {

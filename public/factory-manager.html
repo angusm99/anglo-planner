@@ -30,6 +30,10 @@
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
   .chip { border:1px solid var(--line); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; font-weight:600; }
   .chip.on { border-color:var(--gold); color:var(--gold); background:#2f2a15; } .chip i { color:var(--muted); font-style:normal; margin-left:4px; }
+  input[type=date] { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; color-scheme:dark; }
+  .range { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .range label { letter-spacing:0; }
+  #rangeSummary { grid-column:1/-1; margin:0; }
   input[type=search] { width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 11px; font-size:14px; }
   .layout { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; }
   @media (min-width:1200px) { .layout.open { grid-template-columns:minmax(0,1fr) 460px; } }
@@ -74,6 +78,13 @@
   </div>
   <p class="note">Read-only. Statuses come from the Material Planner (synced every few minutes); "who / when" comes from confirmed tablet taps. Change work on the station tablets or in the planner.</p>
 
+  <div class="filters">
+    <label>INSTALL</label><div class="chips" id="when"></div>
+    <label>RANGE</label><div class="range"><label for="from">From</label><input type="date" id="from" required><label for="to">To</label><input type="date" id="to" required><button class="chip" id="applyRange">Apply dates</button></div>
+    <label>SHOW</label><div class="chips" id="show"></div>
+    <label for="find">FIND</label><input type="search" id="find" placeholder="Bizman ref, task, customer or colour">
+    <p class="note" id="rangeSummary" role="status"></p>
+  </div>
   <div class="tiles">
     <div class="tile"><b id="tJobs">—</b><span>Jobs in view</span></div>
     <div class="tile"><b id="tUnits">—</b><span>Units in view</span></div>
@@ -83,12 +94,6 @@
   </div>
 
   <div class="stations" id="stations"></div>
-
-  <div class="filters">
-    <label>WHEN</label><div class="chips" id="when"></div>
-    <label>SHOW</label><div class="chips" id="show"></div>
-    <label>FIND</label><input type="search" id="find" placeholder="Bizman ref, task, customer or colour">
-  </div>
 
   <div class="layout" id="layout">
     <section id="list"><div class="empty-msg">Loading planner jobs…</div></section>
@@ -103,12 +108,12 @@
 <div id="backdrop" hidden></div>
 <script>
 const SHORT = ["PLN","MAT","DSP","SAW1","SAW2","ASM","GLS","BEAD"];
-const WHEN = [["overdue","Overdue"],["today","Today"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next month"],["all","All ahead"]];
+const WHEN = [["overdue","Overdue"],["today","Today"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next 31 days"],["all","All ahead"]];
 const SHOW = [["all","All jobs"],["attn","Needs attention"],["notready","Not ready"],["ready","Ready"]];
-const st = { when:"7", show:"all", station:0, q:"", sel:null, data:null };
+const st = { when:"7", show:"all", station:0, q:"", from:"", to:"", sel:null, data:null };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
-const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.toLocaleDateString("en-CA"); };
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const dayName = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-ZA", { weekday:"long", day:"numeric", month:"long" });
 const when = (t) => t ? new Date(t.replace(" ", "T")).toLocaleString("en-ZA", { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
 const attn = (j) => j.blockers.length > 0 || j.openIssues > 0 || (!j.ready && j.installDate <= addDays(st.data.today, 2));
@@ -117,6 +122,7 @@ const unitText = (u) => [["windows","win"],["sliding","sliding"],["hinged","hing
 
 function inWhen(j) {
   const t = st.data.today;
+  if (st.when === "custom") return j.installDate >= st.from && j.installDate <= st.to;
   if (st.when === "overdue") return j.overdue;
   if (j.overdue) return false;
   if (st.when === "today") return j.installDate === t;
@@ -143,6 +149,12 @@ function chips(el, items, key) {
 function render() {
   const d = st.data, jobs = visible();
   chips("when", WHEN, "when"); chips("show", SHOW, "show");
+  const first = addDays(d.today, -d.window.overdueLookbackDays), last = addDays(d.today, d.window.aheadDays);
+  const from = st.when === "custom" ? st.from : st.when === "overdue" ? first : d.today;
+  const to = st.when === "custom" ? st.to : st.when === "overdue" ? addDays(d.today,-1) : st.when === "today" ? d.today : st.when === "all" ? last : addDays(d.today,Number(st.when)-1);
+  for (const id of ["from","to"]) { $(id).min=first; $(id).max=last; }
+  $("from").value=from; $("to").value=to;
+  $("rangeSummary").textContent=`Install dates ${dayName(from)} – ${dayName(to)} (inclusive) · ${jobs.length} jobs${st.station ? " · outstanding at " + d.stations[st.station-1].name : ""}.`;
   $("tJobs").textContent = jobs.length;
   $("tUnits").textContent = jobs.reduce((s, j) => s + j.units.total, 0);
   $("tReady").textContent = jobs.filter((j) => j.ready).length;
@@ -164,7 +176,7 @@ function render() {
       <small>${js.length} job${js.length === 1 ? "" : "s"} · ${js.reduce((s, j) => s + j.units.total, 0)} units</small></h2>
       ${js.map((j) => `<div class="job ${j.ready ? "ready" : j.blockers.length ? "blocked" : ""} ${st.sel === j.id ? "sel" : ""}" data-id="${j.id}">
         <div><div class="t">${esc(j.bizRef)} · ${esc(j.customer)}${j.ready ? '<span class="badge ready">READY</span>' : ""}${j.blockers.length || j.openIssues ? '<span class="badge block">ATTENTION</span>' : ""}</div>
-        <div class="s">${k === "overdue" ? `Install ${esc(j.installDate)} · ` : ""}${esc(unitText(j.units))}${j.colour ? ` · ${esc(j.colour)}` : ""} · ${j.progress.done}/${j.progress.needed} stations done${j.booking ? ` · ${esc(j.booking)}` : ""}</div></div>
+        <div class="s">${k === "overdue" ? `Install ${esc(j.installDate)} · ` : ""}Job status: ${esc(j.jobStatus || "blank")} · ${esc(unitText(j.units))}${j.colour ? ` · ${esc(j.colour)}` : ""} · ${j.progress.done}/${j.progress.needed} stations done${j.booking ? ` · ${esc(j.booking)}` : ""}</div></div>
         <div class="strip">${j.stations.map((s, i) => `<span class="cell ${s.state}" title="${esc(s.name)}: ${esc(s.status || "blank")}">${SHORT[i]}</span>`).join("")}</div>
       </div>`).join("")}</div>`).join("")
     : `<div class="empty-msg">No jobs${filt} in this view.</div>`;
@@ -195,13 +207,20 @@ async function openJob(id) {
 function closeJob() { st.sel = null; $("panel").hidden = true; $("backdrop").hidden = true; $("layout").classList.remove("open"); render(); }
 $("backdrop").onclick = closeJob;
 addEventListener("keydown", (e) => { if (e.key === "Escape" && st.sel) closeJob(); });
+$("applyRange").onclick = () => {
+  const from=$("from"), to=$("to");
+  to.setCustomValidity(from.value > to.value ? "End date must be on or after the start date" : "");
+  if (!from.value || !to.value || !from.reportValidity() || !to.reportValidity()) return;
+  st.from=from.value; st.to=to.value; st.when="custom"; render();
+};
+for (const id of ["from","to"]) $(id).oninput=()=>$("to").setCustomValidity("");
 $("find").oninput = (e) => { st.q = e.target.value; render(); };
 
 async function load() {
   try {
     const r = await fetch("/api/factory-manager"); st.data = await r.json(); render();
     $("status").textContent = `Updated ${new Date().toLocaleTimeString("en-ZA", { hour:"2-digit", minute:"2-digit" })}`;
-    $("foot").textContent = `Overdue covers the last ${st.data.window.overdueLookbackDays} days; upcoming covers ${st.data.window.aheadDays} days ahead.`;
+    $("foot").textContent = `Available install dates: last ${st.data.window.overdueLookbackDays} days to ${st.data.window.aheadDays} days ahead. Finished past jobs are excluded; this is a current-work view, not a completed-job archive. Tablet updates today always refer to today.`;
   } catch { $("status").textContent = "Cannot reach the Factory Terminal server — retrying"; }
 }
 load(); setInterval(load, 60000);

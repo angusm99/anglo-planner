@@ -28,12 +28,14 @@
   </div>
 </header>
 <main style="max-width:1280px;">
+  <p class="muted">Current planner statuses. A green station dot means that station is complete, not that the whole job is ready. This legacy view shows up to 200 active rows; use <a href="/factory-manager">Factory manager</a> for install-date filters.</p>
   <div class="metrics" id="metrics" style="margin-bottom:16px;"></div>
 
   <div class="card" style="padding:10px 16px 16px;">
     <div style="display:flex; gap:16px; font-size:13px; color:var(--muted); padding:10px 4px; align-items:center; flex-wrap:wrap;">
       <span>Stations 1–8 — hover for status, click a dot to open that station:</span>
-      <span><span class="dot done"></span> done</span>
+      <span><span class="dot done"></span> completed at that station</span>
+      <span><span class="dot na"></span> not needed</span>
       <span><span class="dot prog"></span> in progress</span>
       <span><span class="dot queue"></span> queued</span>
       <span><span class="dot bad"></span> short / changes</span>
@@ -55,6 +57,7 @@
   </div>
 </main>
 
+<script src="/station-status.js"></script>
 <script src="/common.js"></script>
 <script>
 startClock(document.getElementById("clock"));
@@ -64,23 +67,32 @@ let STATIONS = {};
 fetch("/api/stations").then(r => r.json()).then(s => { STATIONS = s; refresh(); });
 
 let badIdx = -1;
+function stationDot(num, value) {
+  const v = String(value || "").toUpperCase().trim();
+  if (["O", "0", "N/A"].includes(v)) return "na";
+  if (stationIsComplete(num, v)) return "done";
+  if (/SHORT|DEFECT|^REDO\d*$|^REPICK\d*$|^CHANGES$|^RC-X$|^ORDER DUE$|^NOT PICKED$/.test(v)) return "bad";
+  return !v || ["QUEUED","QUEUE OUT","QUEUE IN","SCHEDULED","JOB PICKED","ALLOCATED","PICK TROLLEY","SASH PICKED"].includes(v) ? "queue" : "prog";
+}
 
 async function refresh() {
   const days = new URLSearchParams(location.search).get("days") || "";
   const jobs = await fetch("/api/jobs" + (days ? "?days=" + days : "")).then(r => r.json());
   const today = todayISO();
-  const weekEnd = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const weekEnd = new Date(today + "T00:00:00"); weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekEndISO = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth()+1).padStart(2,"0")}-${String(weekEnd.getDate()).padStart(2,"0")}`;
+  const ready = j => /^(ALL READY|DONE|DELIVERED|READY.*)$/.test(String(j.job_status || "").toUpperCase().trim());
 
   const isBad = (j) =>
-    [j.s1, j.s2, j.s3, j.s4, j.s5, j.s6, j.s7, j.job_status].some(v => classify(v) === "bad");
+    Object.entries(STATIONS).some(([num, st]) => stationDot(num, j[st.key]) === "bad");
 
   const isOverdue = (j) => j.install_date < today &&
-    !["ALL READY", "DONE"].includes((j.job_status || "").toUpperCase().trim());
+    !ready(j);
 
-  const dueWeek = jobs.filter(j => j.install_date >= today && j.install_date <= weekEnd).length;
+  const dueWeek = jobs.filter(j => j.install_date >= today && j.install_date <= weekEndISO).length;
   const overdue = jobs.filter(isOverdue).length;
-  const inAssembly = jobs.filter(j => classify(j.s6) === "prog").length;
-  const allReady = jobs.filter(j => (j.job_status || "").toUpperCase() === "ALL READY").length;
+  const inAssembly = jobs.filter(j => stationDot(6, j.s6) === "prog").length;
+  const allReady = jobs.filter(ready).length;
   const shorts = jobs.filter(isBad).length;
 
   document.getElementById("metrics").innerHTML = `
@@ -88,7 +100,7 @@ async function refresh() {
     <div class="metric"><div class="label">Due in next 7 days</div><div class="value">${dueWeek}</div></div>
     <div class="metric ${overdue ? "warn" : ""}"><div class="label">Past install, not ready</div><div class="value">${overdue}</div></div>
     <div class="metric"><div class="label">In assembly</div><div class="value">${inAssembly}</div></div>
-    <div class="metric"><div class="label">All ready</div><div class="value">${allReady}</div></div>
+    <div class="metric"><div class="label">Ready for install</div><div class="value">${allReady}</div></div>
     <div class="metric ${shorts ? "alert clickable" : ""}" ${shorts ? 'onclick="cycleShorts()" title="Click to jump to the next short/change"' : ""}>
       <div class="label">Shorts / changes</div><div class="value">${shorts}</div>
       ${shorts ? '<div class="hint" id="shortsHint">click to locate ↓</div>' : ""}
@@ -100,7 +112,7 @@ async function refresh() {
       const v = j[st.key];
       const display = v && String(v).trim() !== "0" ? v : "—";
       const label = `Station ${num} — ${st.name}: ${display}`;
-      return `<a class="dot ${classify(v)}" href="/station/${num}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
+      return `<a class="dot ${stationDot(num, v)}" href="/station/${num}" title="${esc(label)}" aria-label="${esc(label)}"></a>`;
     }).join(" ");
     const js = (j.job_status || "").trim();
     const overdueJob = isOverdue(j);
@@ -110,7 +122,7 @@ async function refresh() {
       <td class="${overdueJob ? "overdue" : ""}">${fmtDate(j.install_date)}${overdueJob ? " ⚠" : ""}</td>
       <td>${esc(j.colour)}</td>
       <td><span style="display:inline-flex; gap:6px;">${dots}</span></td>
-      <td><span class="pill ${classify(js)}">${esc(js || "—")}</span></td>
+      <td><span class="pill ${ready(j) ? "done" : isBad(j) ? "bad" : "prog"}">${esc(js || "—")}</span></td>
     </tr>`;
   }).join("");
   document.getElementById("empty").style.display = jobs.length ? "none" : "block";

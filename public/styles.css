@@ -245,3 +245,5 @@ label.field select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px va
   max-width: 90vw;
 }
 .toast.show { opacity: 1; }
+
+.dot.na { background: #555; border: 1px solid #888; }
