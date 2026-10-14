@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { DatabaseSync } = require("node:sqlite");
-const { factoryManager, factoryJobDetail, stationState } = require("../src/factoryManager");
+const { factoryManager, factoryJobDetail, stationState, workpoolUrl } = require("../src/factoryManager");
 
 function makeDb() {
   const db = new DatabaseSync(":memory:");
@@ -57,4 +57,10 @@ test("job detail returns history and 404s unknown ids", () => {
   assert.equal(d.events.length, 1);
   assert.equal(d.events[0].station, 4);
   assert.ok(factoryJobDetail(db, 999).error);
+});
+
+test("WorkPool link points at the parent task (W-POOL REF), never at junk refs", () => {
+  assert.equal(workpoolUrl("553916"), "https://anglowindows.myworkpool.net/task/view.do?goToViewTask=true&taskId=553916");
+  assert.equal(workpoolUrl(" 550230 "), "https://anglowindows.myworkpool.net/task/view.do?goToViewTask=true&taskId=550230");
+  for (const bad of ["", null, "D3024", "55 0230", "550230&x=1"]) assert.equal(workpoolUrl(bad), "");
 });

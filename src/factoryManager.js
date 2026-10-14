@@ -8,6 +8,10 @@ const { STATIONS, norm } = require("./cascade");
 const { addDaysISO, blockerForStatus, isReadyStatus, stationIsComplete, stationForSource } = require("./managerSummary");
 
 const NOT_NEEDED = new Set(["O", "0", "N/A"]);
+// W-POOL REF (planner column A / task_no) is the WorkPool parent task - the same
+// task the calendar booking hangs off. Same URL the planner import hyperlinks.
+const WORKPOOL_TASK = "https://anglowindows.myworkpool.net/task/view.do?goToViewTask=true&taskId=";
+const workpoolUrl = (taskNo) => (/^\d+$/.test(String(taskNo || "").trim()) ? WORKPOOL_TASK + String(taskNo).trim() : "");
 const OVERDUE_LOOKBACK_DAYS = 30; // older unfinished rows are sheet noise, not floor work
 const AHEAD_DAYS = 120;
 
@@ -45,7 +49,7 @@ function toJob(j, lastByField) {
   const blocked = stations.filter((s) => s.state === "blocked");
   return {
     id: j.id, bizRef: j.biz_ref || j.task_no || "—", taskNo: j.task_no || "", customer: j.customer || "",
-    colour: j.colour || "", installDate: j.install_date, booking: norm(j.send_to_dash), jobStatus: norm(j.job_status),
+    colour: j.colour || "", workpoolUrl: workpoolUrl(j.task_no), installDate: j.install_date, booking: norm(j.send_to_dash), jobStatus: norm(j.job_status),
     units: units(j), stations, ready, openIssues: Number(j.open_issues || 0),
     blockers: blocked.map((s) => `${s.name}: ${s.status}`),
     progress: { done: needed.filter((s) => s.state === "done").length, needed: needed.length },
@@ -114,4 +118,4 @@ function factoryJobDetail(db, id) {
   return { job: toJob({ ...job, last_event_at: events[0]?.created_at || "" }, lastByField), events, issues };
 }
 
-module.exports = { factoryManager, factoryJobDetail, stationState };
+module.exports = { factoryManager, factoryJobDetail, stationState, workpoolUrl };

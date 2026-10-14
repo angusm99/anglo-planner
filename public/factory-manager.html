@@ -49,6 +49,7 @@
   .legend .cell { width:16px; height:12px; display:inline-block; vertical-align:middle; margin-right:4px; }
   aside { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; align-self:start; position:sticky; top:72px; max-height:calc(100vh - 90px); overflow:auto; }
   @media (max-width:1199px) { aside { position:fixed; inset:0 0 0 auto; width:min(460px,100%); top:0; max-height:none; border-radius:0; z-index:20; } #backdrop { position:fixed; inset:0; background:#0009; z-index:15; } }
+  .wp { display:inline-block; background:var(--gold); color:#1b1a14; font-weight:800; text-decoration:none; border-radius:8px; padding:8px 12px; margin:8px 0 4px; }
   aside h3 { margin:0 0 2px; } aside .close { float:right; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:5px 10px; cursor:pointer; }
   table { width:100%; border-collapse:collapse; font-size:13px; margin:8px 0 14px; }
   th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:600; font-size:12px; }
@@ -178,7 +179,9 @@ async function openJob(id) {
   if (d.error) { p.innerHTML = `<p>${esc(d.error)}</p>`; return; }
   const j = d.job, u = j.units, color = { done:"var(--done)", todo:"var(--todo)", blocked:"var(--block)", na:"#444", empty:"#333" };
   p.innerHTML = `<button class="close" id="close">Close ✕</button><h3>${esc(j.bizRef)}</h3>
-    <div>${esc(j.customer)}</div><div class="muted">Task ${esc(j.taskNo || "—")} · install ${esc(j.installDate || "—")} · ${esc(j.booking || "")} · ${esc(j.colour)}</div>
+    <div>${esc(j.customer)}</div>
+    ${/^https:\/\/anglowindows\.myworkpool\.net\//.test(j.workpoolUrl) ? `<p><a class="wp" href="${esc(j.workpoolUrl)}" target="_blank" rel="noopener">Open parent task ${esc(j.taskNo)} in WorkPool ↗</a></p>` : '<p class="muted">No WorkPool task number on this planner row.</p>'}
+    <div class="muted">Task ${esc(j.taskNo || "—")} · install ${esc(j.installDate || "—")} · ${esc(j.booking || "")} · ${esc(j.colour)}</div>
     <table><tr><th>Windows</th><th>Sliding</th><th>Hinged</th><th>Fold</th><th>Palace</th><th>Specials</th><th>Total</th></tr>
       <tr><td>${u.windows}</td><td>${u.sliding}</td><td>${u.hinged}</td><td>${u.fold}</td><td>${u.palace}</td><td>${u.specials}</td><td><b>${u.total}</b></td></tr></table>
     <table><tr><th>Station</th><th>Status</th><th>Last tablet change</th></tr>
