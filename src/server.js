@@ -9,6 +9,7 @@ const { STATIONS, applyCascade, norm } = require("./cascade");
 const { cleanRedoInput, redoChanges, redoneChanges } = require("./redo");
 const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
+const { factoryManager, factoryJobDetail } = require("./factoryManager");
 const { createBoard } = require("./stationBoard");
 const { getWip,readMasterStatus,readMasterJobs } = require("./wipTv");
 const crypto = require("node:crypto");
@@ -644,6 +645,11 @@ const server = http.createServer(async (req, res) => {
       const result = stationLog(db, url.searchParams.get("station"), url.searchParams.get("days"));
       return json(res, result.error ? 400 : 200, result);
     }
+    if (p === "/api/factory-manager" && req.method === "GET") return json(res, 200, factoryManager(db));
+    if (p === "/api/factory-manager/job" && req.method === "GET") {
+      const result = factoryJobDetail(db, url.searchParams.get("id"));
+      return json(res, result.error ? 404 : 200, result);
+    }
     if (p === "/api/manager-summary" && req.method === "GET") {
       return json(res, 200, managerSummary(db, { days: url.searchParams.get("days") }));
     }
@@ -686,6 +692,7 @@ const server = http.createServer(async (req, res) => {
     if (/^\/station\/\d+$/.test(p)) file = "/station.html";
     if (p === "/dashboard") file = "/dashboard.html";
     if (p === "/manager" || p === "/control") file = "/manager.html";
+    if (p === "/factory-manager") file = "/factory-manager.html";
     if (/^\/board\/(4|5|6|8)$/.test(p) || p === "/foreman-board") file = "/station-board.html";
     if (p === "/office") file = "/office.html";
     if (p === "/station-log") file = "/station-log.html";

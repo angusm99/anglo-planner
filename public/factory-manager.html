@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory Manager — Anglo Windows</title>
+<style>
+  :root { --bg:#16150f; --panel:#211f19; --panel2:#2a2820; --line:#3a372c; --text:#f2efe6; --muted:#a8a395;
+    --gold:#f2c230; --done:#2fae6b; --todo:#4b5563; --block:#e5534b; --na:#2c2a23; --empty:#1d1c17; --amber:#e8a33a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:12px 16px; border-bottom:2px solid var(--gold); background:#1b1a14; position:sticky; top:0; z-index:5; }
+  header img { height:34px; border-radius:4px; background:var(--gold); padding:3px 6px; }
+  header h1 { margin:0; font-size:18px; } header small { color:var(--muted); display:block; font-size:12px; }
+  #status { margin-left:auto; font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  main { padding:14px 16px 40px; max-width:1600px; margin:0 auto; }
+  .links { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .links a { color:var(--text); text-decoration:none; border:1px solid var(--line); background:var(--panel); border-radius:8px; padding:7px 11px; font-size:13px; font-weight:600; }
+  .note { color:var(--muted); font-size:12px; margin:0 0 12px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin-bottom:12px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .tile b { display:block; font-size:28px; color:var(--gold); } .tile span { color:var(--muted); font-size:13px; }
+  .stations { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+  .st { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:9px 11px; cursor:pointer; }
+  .st.on { border-color:var(--gold); box-shadow:inset 0 0 0 1px var(--gold); }
+  .st .n { font-size:11px; color:var(--gold); font-weight:700; letter-spacing:.04em; } .st .nm { font-weight:700; }
+  .st .c { font-size:12px; color:var(--muted); } .st .c em { color:var(--block); font-style:normal; }
+  .filters { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:grid; grid-template-columns:70px 1fr; gap:8px 10px; align-items:center; margin-bottom:14px; }
+  .filters label { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.05em; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { border:1px solid var(--line); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; font-weight:600; }
+  .chip.on { border-color:var(--gold); color:var(--gold); background:#2f2a15; } .chip i { color:var(--muted); font-style:normal; margin-left:4px; }
+  input[type=search] { width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 11px; font-size:14px; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; }
+  @media (min-width:1200px) { .layout.open { grid-template-columns:minmax(0,1fr) 460px; } }
+  .day h2 { font-size:18px; margin:18px 0 8px; display:flex; align-items:center; gap:10px; border-bottom:2px solid var(--gold); padding-bottom:6px; }
+  .day h2 .tag { font-size:12px; border:1px solid var(--gold); color:var(--gold); border-radius:6px; padding:2px 8px; }
+  .day h2 .tag.red { border-color:var(--block); color:var(--block); } .day h2 small { color:var(--muted); font-weight:500; font-size:13px; margin-left:auto; }
+  .job { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 14px; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--todo); border-radius:8px; padding:10px 12px; margin-bottom:6px; cursor:pointer; }
+  .job.ready { border-left-color:var(--done); } .job.blocked { border-left-color:var(--block); } .job.sel { outline:2px solid var(--gold); }
+  .job .t { font-weight:700; } .job .s { color:var(--muted); font-size:12px; }
+  .strip { display:flex; gap:3px; align-items:center; }
+  .cell { width:34px; height:26px; border-radius:5px; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; color:#fff; }
+  .cell.done { background:var(--done); } .cell.todo { background:var(--todo); } .cell.blocked { background:var(--block); }
+  .cell.na { background:var(--na); color:#666; } .cell.empty { background:var(--empty); color:#555; border:1px dashed #3a372c; }
+  .badge { font-size:11px; font-weight:800; border-radius:6px; padding:2px 7px; margin-left:6px; }
+  .badge.ready { background:#163d28; color:#6fdc9f; } .badge.block { background:#4a1b19; color:#ff8f88; }
+  .legend { display:flex; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:12px; margin:4px 0 0; }
+  .legend .cell { width:16px; height:12px; display:inline-block; vertical-align:middle; margin-right:4px; }
+  aside { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; align-self:start; position:sticky; top:72px; max-height:calc(100vh - 90px); overflow:auto; }
+  @media (max-width:1199px) { aside { position:fixed; inset:0 0 0 auto; width:min(460px,100%); top:0; max-height:none; border-radius:0; z-index:20; } #backdrop { position:fixed; inset:0; background:#0009; z-index:15; } }
+  aside h3 { margin:0 0 2px; } aside .close { float:right; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:5px 10px; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin:8px 0 14px; }
+  th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:600; font-size:12px; }
+  .pill { font-size:11px; font-weight:800; border-radius:5px; padding:2px 6px; color:#fff; }
+  .muted { color:var(--muted); } .empty-msg { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:28px; text-align:center; color:var(--muted); }
+  footer { color:var(--muted); font-size:12px; margin-top:20px; }
+  @media (max-width:640px) { .job { grid-template-columns:1fr; } .cell { width:30px; } .filters { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/anglo-logo.png" alt="Anglo Windows">
+  <div><h1>Factory manager</h1><small>Material Planner · station work and confirmed tablet updates</small></div>
+  <div id="status">Reading planner…</div>
+</header>
+<main>
+  <div class="links">
+    <a href="https://docs.google.com/spreadsheets/d/111LJiZGBg8_HaT3ruWWx9RmY_UTheTUzFFYcCOj0Umw/edit" target="_blank" rel="noopener">Material Planner ↗</a>
+    <a href="/dashboard" target="_blank">W.I.P dashboard ↗</a>
+    <a href="/station-log" target="_blank">Station log ↗</a>
+    <a href="/manager" target="_blank">Command centre ↗</a>
+  </div>
+  <p class="note">Read-only. Statuses come from the Material Planner (synced every few minutes); "who / when" comes from confirmed tablet taps. Change work on the station tablets or in the planner.</p>
+
+  <div class="tiles">
+    <div class="tile"><b id="tJobs">—</b><span>Jobs in view</span></div>
+    <div class="tile"><b id="tUnits">—</b><span>Units in view</span></div>
+    <div class="tile"><b id="tReady">—</b><span>Ready for install</span></div>
+    <div class="tile"><b id="tAttn">—</b><span>Need attention</span></div>
+    <div class="tile"><b id="tToday">—</b><span>Tablet updates today</span></div>
+  </div>
+
+  <div class="stations" id="stations"></div>
+
+  <div class="filters">
+    <label>WHEN</label><div class="chips" id="when"></div>
+    <label>SHOW</label><div class="chips" id="show"></div>
+    <label>FIND</label><input type="search" id="find" placeholder="Bizman ref, task, customer or colour">
+  </div>
+
+  <div class="layout" id="layout">
+    <section id="list"><div class="empty-msg">Loading planner jobs…</div></section>
+    <aside id="panel" hidden></aside>
+  </div>
+  <div class="legend">
+    <span><i class="cell done"></i>Done</span><span><i class="cell todo"></i>To do / in progress</span>
+    <span><i class="cell blocked"></i>Short / defect / redo</span><span><i class="cell na"></i>Not needed (O)</span><span><i class="cell empty"></i>Blank</span>
+  </div>
+  <footer id="foot"></footer>
+</main>
+<div id="backdrop" hidden></div>
+<script>
+const SHORT = ["PLN","MAT","DSP","SAW1","SAW2","ASM","GLS","BEAD"];
+const WHEN = [["overdue","Overdue"],["today","Today"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next month"],["all","All ahead"]];
+const SHOW = [["all","All jobs"],["attn","Needs attention"],["notready","Not ready"],["ready","Ready"]];
+const st = { when:"7", show:"all", station:0, q:"", sel:null, data:null };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.toLocaleDateString("en-CA"); };
+const dayName = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-ZA", { weekday:"long", day:"numeric", month:"long" });
+const when = (t) => t ? new Date(t.replace(" ", "T")).toLocaleString("en-ZA", { weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+const attn = (j) => j.blockers.length > 0 || j.openIssues > 0 || (!j.ready && j.installDate <= addDays(st.data.today, 2));
+const unitText = (u) => [["windows","win"],["sliding","sliding"],["hinged","hinged"],["fold","fold"],["palace","palace"],["specials","spec"]]
+  .filter(([k]) => u[k]).map(([k, l]) => `${u[k]} ${l}`).join(" · ") || "no units";
+
+function inWhen(j) {
+  const t = st.data.today;
+  if (st.when === "overdue") return j.overdue;
+  if (j.overdue) return false;
+  if (st.when === "today") return j.installDate === t;
+  if (st.when === "all") return true;
+  return j.installDate <= addDays(t, Number(st.when) - 1);
+}
+const outstanding = (j, n) => ["todo","blocked"].includes(j.stations[n - 1].state);
+function visible(ignoreStation) {
+  const q = st.q.trim().toLowerCase();
+  return st.data.jobs.filter((j) => inWhen(j)
+    && (st.show === "all" || (st.show === "attn" ? attn(j) : st.show === "ready" ? j.ready : !j.ready))
+    && (ignoreStation || !st.station || outstanding(j, st.station))
+    && (!q || [j.bizRef, j.taskNo, j.customer, j.colour].join(" ").toLowerCase().includes(q)));
+}
+
+function chips(el, items, key) {
+  $(el).innerHTML = items.map(([v, l]) => {
+    const n = key === "when" ? st.data.jobs.filter((j) => { const k = st.when; st.when = v; const r = inWhen(j); st.when = k; return r; }).length : "";
+    return `<button class="chip ${st[key] === v ? "on" : ""}" data-v="${v}">${l}${n !== "" ? `<i>${n}</i>` : ""}</button>`;
+  }).join("");
+  $(el).onclick = (e) => { const b = e.target.closest("button"); if (b) { st[key] = b.dataset.v; render(); } };
+}
+
+function render() {
+  const d = st.data, jobs = visible();
+  chips("when", WHEN, "when"); chips("show", SHOW, "show");
+  $("tJobs").textContent = jobs.length;
+  $("tUnits").textContent = jobs.reduce((s, j) => s + j.units.total, 0);
+  $("tReady").textContent = jobs.filter((j) => j.ready).length;
+  $("tAttn").textContent = jobs.filter(attn).length;
+  $("tToday").textContent = d.stations.reduce((s, x) => s + x.updatesToday, 0);
+  const pool = visible(true); // station counts follow WHEN / SHOW / FIND
+  $("stations").innerHTML = d.stations.map((s) => ({ ...s, toDo: pool.filter((j) => outstanding(j, s.number)).length,
+      blocked: pool.filter((j) => j.stations[s.number - 1].state === "blocked").length })).map((s) => `<div class="st ${st.station === s.number ? "on" : ""}" data-n="${s.number}">
+      <div class="n">STATION ${s.number}</div><div class="nm">${esc(s.name)}</div>
+      <div class="c">${s.toDo} to do in view${s.blocked ? ` · <em>${s.blocked} blocked</em>` : ""}</div>
+      <div class="c">${s.updatesToday ? `${s.updatesToday} today · ${esc(s.operatorsToday.join(", "))}` : `No taps today${s.lastActivityAt ? ` · last ${when(s.lastActivityAt)}` : ""}`}</div></div>`).join("");
+  $("stations").onclick = (e) => { const c = e.target.closest(".st"); if (c) { const n = Number(c.dataset.n); st.station = st.station === n ? 0 : n; render(); } };
+
+  const groups = new Map();
+  for (const j of jobs) { const k = j.overdue ? "overdue" : j.installDate; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(j); }
+  const filt = st.station ? ` still to do at ${d.stations[st.station - 1].name}` : "";
+  $("list").innerHTML = jobs.length ? [...groups].map(([k, js]) => `<div class="day"><h2>${k === "overdue" ? "Install date passed — not ready" : esc(dayName(k))}
+      ${k === "overdue" ? '<span class="tag red">Overdue</span>' : k === d.today ? '<span class="tag">Today</span>' : ""}
+      <small>${js.length} job${js.length === 1 ? "" : "s"} · ${js.reduce((s, j) => s + j.units.total, 0)} units</small></h2>
+      ${js.map((j) => `<div class="job ${j.ready ? "ready" : j.blockers.length ? "blocked" : ""} ${st.sel === j.id ? "sel" : ""}" data-id="${j.id}">
+        <div><div class="t">${esc(j.bizRef)} · ${esc(j.customer)}${j.ready ? '<span class="badge ready">READY</span>' : ""}${j.blockers.length || j.openIssues ? '<span class="badge block">ATTENTION</span>' : ""}</div>
+        <div class="s">${k === "overdue" ? `Install ${esc(j.installDate)} · ` : ""}${esc(unitText(j.units))}${j.colour ? ` · ${esc(j.colour)}` : ""} · ${j.progress.done}/${j.progress.needed} stations done${j.booking ? ` · ${esc(j.booking)}` : ""}</div></div>
+        <div class="strip">${j.stations.map((s, i) => `<span class="cell ${s.state}" title="${esc(s.name)}: ${esc(s.status || "blank")}">${SHORT[i]}</span>`).join("")}</div>
+      </div>`).join("")}</div>`).join("")
+    : `<div class="empty-msg">No jobs${filt} in this view.</div>`;
+  $("list").onclick = (e) => { const r = e.target.closest(".job"); if (r) openJob(Number(r.dataset.id)); };
+}
+
+async function openJob(id) {
+  st.sel = id; render();
+  const p = $("panel"); p.hidden = false; $("layout").classList.add("open"); $("backdrop").hidden = innerWidth >= 1200;
+  p.innerHTML = '<p class="muted">Loading job…</p>';
+  const r = await fetch(`/api/factory-manager/job?id=${id}`); const d = await r.json();
+  if (d.error) { p.innerHTML = `<p>${esc(d.error)}</p>`; return; }
+  const j = d.job, u = j.units, color = { done:"var(--done)", todo:"var(--todo)", blocked:"var(--block)", na:"#444", empty:"#333" };
+  p.innerHTML = `<button class="close" id="close">Close ✕</button><h3>${esc(j.bizRef)}</h3>
+    <div>${esc(j.customer)}</div><div class="muted">Task ${esc(j.taskNo || "—")} · install ${esc(j.installDate || "—")} · ${esc(j.booking || "")} · ${esc(j.colour)}</div>
+    <table><tr><th>Windows</th><th>Sliding</th><th>Hinged</th><th>Fold</th><th>Palace</th><th>Specials</th><th>Total</th></tr>
+      <tr><td>${u.windows}</td><td>${u.sliding}</td><td>${u.hinged}</td><td>${u.fold}</td><td>${u.palace}</td><td>${u.specials}</td><td><b>${u.total}</b></td></tr></table>
+    <table><tr><th>Station</th><th>Status</th><th>Last tablet change</th></tr>
+      ${j.stations.map((s) => `<tr><td>${s.number} · ${esc(s.name)}</td><td><span class="pill" style="background:${color[s.state]}">${esc(s.status || "blank")}</span></td>
+        <td class="muted">${s.lastAt ? `${esc(s.lastBy)} · ${when(s.lastAt)}` : "—"}</td></tr>`).join("")}</table>
+    ${d.issues.length ? `<h4>Issues / REDO</h4><table><tr><th>When</th><th>Stn</th><th>Issue</th><th>Done</th></tr>${d.issues.map((i) => `<tr><td>${when(i.created_at)}</td><td>${i.station}</td><td>${esc(i.operator)}: ${esc(i.unit)} ${esc(i.issue)} ${esc(i.material)}</td><td>${i.repick_done ? "Yes" : "No"}</td></tr>`).join("")}</table>` : ""}
+    <h4>Tablet history</h4>${d.events.length ? `<table><tr><th>When</th><th>Who</th><th>Change</th></tr>${d.events.map((e) => `<tr><td>${when(e.created_at)}</td><td>${esc(e.actor)}${e.station ? ` <span class="muted">S${e.station}</span>` : ""}</td>
+      <td>${e.field === "confirm-noop" ? `<span class="muted">re-confirmed ${esc(e.new_value)}</span>` : `${esc(e.field.toUpperCase())}: ${esc(e.old_value || "—")} → <b>${esc(e.new_value)}</b>`}</td></tr>`).join("")}</table>` : '<p class="muted">No tablet taps recorded for this job — statuses were set in the planner.</p>'}`;
+  $("close").onclick = closeJob;
+}
+function closeJob() { st.sel = null; $("panel").hidden = true; $("backdrop").hidden = true; $("layout").classList.remove("open"); render(); }
+$("backdrop").onclick = closeJob;
+addEventListener("keydown", (e) => { if (e.key === "Escape" && st.sel) closeJob(); });
+$("find").oninput = (e) => { st.q = e.target.value; render(); };
+
+async function load() {
+  try {
+    const r = await fetch("/api/factory-manager"); st.data = await r.json(); render();
+    $("status").textContent = `Updated ${new Date().toLocaleTimeString("en-ZA", { hour:"2-digit", minute:"2-digit" })}`;
+    $("foot").textContent = `Overdue covers the last ${st.data.window.overdueLookbackDays} days; upcoming covers ${st.data.window.aheadDays} days ahead.`;
+  } catch { $("status").textContent = "Cannot reach the Factory Terminal server — retrying"; }
+}
+load(); setInterval(load, 60000);
+try { new EventSource("/api/stream").addEventListener("job-updated", () => { clearTimeout(load.t); load.t = setTimeout(load, 1500); }); } catch {}
+</script>
+</body>
+</html>
