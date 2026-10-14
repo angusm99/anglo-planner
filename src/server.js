@@ -185,7 +185,13 @@ function lookup(ref) {
   ).all(q, q);
 }
 
-function activeJobs(days) {
+function activeJobs(days, from, to) {
+  if (from !== null || to !== null) {
+    const valid = v => /^\d{4}-\d{2}-\d{2}$/.test(v || "") && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0,10) === v;
+    if (!valid(from) || !valid(to) || from > to || Date.parse(to)-Date.parse(from) > 365*864e5)
+      return { error: "Choose valid From/To dates in order, at most 366 days inclusive" };
+    return db.prepare(`SELECT ${JOB_COLS} FROM jobs WHERE active=1 AND install_date BETWEEN ? AND ? ORDER BY install_date, biz_ref`).all(from,to);
+  }
   const lookback = Math.min(Math.max(Number(days) || 45, 1), 365);
   return db.prepare(
     `SELECT ${JOB_COLS} FROM jobs
@@ -615,7 +621,8 @@ const server = http.createServer(async (req, res) => {
         const result = createJob(await readBody(req));
         return json(res, result.error ? 400 : 200, result);
       }
-      return json(res, 200, activeJobs(url.searchParams.get("days")));
+      const result = activeJobs(url.searchParams.get("days"),url.searchParams.get("from"),url.searchParams.get("to"));
+      return json(res, result.error ? 400 : 200, result);
     }
     const jobMatch = p.match(/^\/api\/jobs\/(\d+)$/);
     if (jobMatch) {

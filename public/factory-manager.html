@@ -108,9 +108,9 @@
 <div id="backdrop" hidden></div>
 <script>
 const SHORT = ["PLN","MAT","DSP","SAW1","SAW2","ASM","GLS","BEAD"];
-const WHEN = [["overdue","Overdue"],["today","Today"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next 31 days"],["all","All ahead"]];
+const WHEN = [["overdue","Overdue"],["today","Today"],["tomorrow","Tomorrow"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next 31 days"],["all","All ahead"]];
 const SHOW = [["all","All jobs"],["attn","Needs attention"],["notready","Not ready"],["ready","Ready"]];
-const st = { when:"7", show:"all", station:0, q:"", from:"", to:"", sel:null, data:null };
+const st = { when:"tomorrow", show:"all", station:0, q:"", from:"", to:"", sel:null, data:null };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -126,6 +126,7 @@ function inWhen(j) {
   if (st.when === "overdue") return j.overdue;
   if (j.overdue) return false;
   if (st.when === "today") return j.installDate === t;
+  if (st.when === "tomorrow") return j.installDate === addDays(t,1);
   if (st.when === "all") return true;
   return j.installDate <= addDays(t, Number(st.when) - 1);
 }
@@ -150,8 +151,8 @@ function render() {
   const d = st.data, jobs = visible();
   chips("when", WHEN, "when"); chips("show", SHOW, "show");
   const first = addDays(d.today, -d.window.overdueLookbackDays), last = addDays(d.today, d.window.aheadDays);
-  const from = st.when === "custom" ? st.from : st.when === "overdue" ? first : d.today;
-  const to = st.when === "custom" ? st.to : st.when === "overdue" ? addDays(d.today,-1) : st.when === "today" ? d.today : st.when === "all" ? last : addDays(d.today,Number(st.when)-1);
+  const from = st.when === "custom" ? st.from : st.when === "overdue" ? first : st.when === "tomorrow" ? addDays(d.today,1) : d.today;
+  const to = st.when === "custom" ? st.to : st.when === "overdue" ? addDays(d.today,-1) : st.when === "today" ? d.today : st.when === "tomorrow" ? addDays(d.today,1) : st.when === "all" ? last : addDays(d.today,Number(st.when)-1);
   for (const id of ["from","to"]) { $(id).min=first; $(id).max=last; }
   $("from").value=from; $("to").value=to;
   $("rangeSummary").textContent=`Install dates ${dayName(from)} – ${dayName(to)} (inclusive) · ${jobs.length} jobs${st.station ? " · outstanding at " + d.stations[st.station-1].name : ""}.`;

@@ -14,7 +14,7 @@ test("WIP dots agree with manager station states; manager dates are inclusive an
  const m=vm.createContext({document,fetch:()=>new Promise(()=>{}),setInterval(){},addEventListener(){},EventSource:class{addEventListener(){}},innerWidth:1400});vm.runInContext(script,m);
  const jobs=["2026-10-13","2026-10-14","2026-10-15","2026-10-20","2026-10-21"].map((date,i)=>({id:i,bizRef:`D${i}`,customer:"Test",taskNo:"",colour:"",installDate:date,overdue:date<"2026-10-14",ready:false,openIssues:0,blockers:[],units:{total:1},stations:Array.from({length:8},(_,i)=>({state:i===3?"todo":"done",status:"DONE",name:"Station"})),progress:{done:7,needed:8}}));
  vm.runInContext(`st.data=${JSON.stringify({today:"2026-10-14",window:{overdueLookbackDays:30,aheadDays:120},jobs,stations:Object.entries(STATIONS).map(([n,s])=>({number:Number(n),name:s.name,updatesToday:0,operatorsToday:[]}))})};render()`,m);
- assert.equal(elements.get("from").value,"2026-10-14");assert.equal(elements.get("to").value,"2026-10-20");assert.equal(elements.get("tJobs").textContent,3);
+ assert.equal(elements.get("from").value,"2026-10-15");assert.equal(elements.get("to").value,"2026-10-15");assert.equal(elements.get("tJobs").textContent,1);
  elements.get("from").value="2026-10-13";elements.get("to").value="2026-10-15";elements.get("applyRange").onclick();assert.equal(elements.get("tJobs").textContent,3);
  vm.runInContext('st.station=4;st.q="D1";render()',m);assert.equal(elements.get("tJobs").textContent,1);assert.equal(elements.get("from").value,"2026-10-13");
  elements.get("from").value="2026-10-20";elements.get("to").value="2026-10-14";elements.get("applyRange").onclick();assert.match(elements.get("to").validation,/End date/);

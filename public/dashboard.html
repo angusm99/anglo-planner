@@ -28,7 +28,13 @@
   </div>
 </header>
 <main style="max-width:1280px;">
-  <p class="muted">Current planner statuses. A green station dot means that station is complete, not that the whole job is ready. This legacy view shows up to 200 active rows; use <a href="/factory-manager">Factory manager</a> for install-date filters.</p>
+  <p class="muted">Current planner statuses. A green station dot means that station is complete, not that the whole job is ready. Dates below are install dates. Counts follow the selected range.</p>
+  <div class="card" style="padding:12px; margin-bottom:14px;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <button class="theme" id="previous">Previous day</button><button class="theme" id="today">Today</button><button class="theme" id="tomorrow">Tomorrow</button><button class="theme" id="nextWeek">Next 7 days</button>
+      <label for="from">From</label><input type="date" id="from" required><label for="to">To</label><input type="date" id="to" required><button class="theme" id="applyDates">Apply dates</button>
+    </div><p id="dateRange" role="status" style="margin-bottom:0;"></p>
+  </div>
   <div class="metrics" id="metrics" style="margin-bottom:16px;"></div>
 
   <div class="card" style="padding:10px 16px 16px;">
@@ -64,6 +70,17 @@ startClock(document.getElementById("clock"));
 document.getElementById("themeBtn").textContent = themeButtonLabel();
 
 let STATIONS = {};
+const $ = id => document.getElementById(id);
+const addDays = (iso,n) => { const d=new Date(iso+"T00:00:00");d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+let from=addDays(todayISO(),1),to=from;
+function setRange(a,b) { from=a;to=b;$("from").value=a;$("to").value=b;return refresh(); }
+$("from").value=from;$("to").value=to;
+$("previous").onclick=()=>setRange(addDays(from,-1),addDays(from,-1));
+$("today").onclick=()=>setRange(todayISO(),todayISO());
+$("tomorrow").onclick=()=>setRange(addDays(todayISO(),1),addDays(todayISO(),1));
+$("nextWeek").onclick=()=>setRange(todayISO(),addDays(todayISO(),6));
+$("applyDates").onclick=()=>{ const a=$("from"),b=$("to");b.setCustomValidity(a.value>b.value?"End date must be on or after the start date":"");if(a.reportValidity()&&b.reportValidity())setRange(a.value,b.value); };
+for(const id of ["from","to"]) $(id).oninput=()=>$("to").setCustomValidity("");
 fetch("/api/stations").then(r => r.json()).then(s => { STATIONS = s; refresh(); });
 
 let badIdx = -1;
@@ -76,8 +93,15 @@ function stationDot(num, value) {
 }
 
 async function refresh() {
-  const days = new URLSearchParams(location.search).get("days") || "";
-  const jobs = await fetch("/api/jobs" + (days ? "?days=" + days : "")).then(r => r.json());
+  const a=from,b=to;
+  let jobs;
+  try {
+    const r=await fetch(`/api/jobs?from=${encodeURIComponent(a)}&to=${encodeURIComponent(b)}`);jobs=await r.json();
+    if(!r.ok)throw Error(jobs.error || "Could not load jobs");
+    if(a!==from || b!==to)return;
+    jobs=jobs.filter(j=>j.install_date>=a && j.install_date<=b);
+    $("dateRange").textContent=`Install ${a} – ${b} (inclusive) · ${jobs.length} jobs`;
+  } catch(e) { if(a===from&&b===to){$("dateRange").textContent=e.message;$("rows").innerHTML="";$("metrics").innerHTML="";}return; }
   const today = todayISO();
   const weekEnd = new Date(today + "T00:00:00"); weekEnd.setDate(weekEnd.getDate() + 6);
   const weekEndISO = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth()+1).padStart(2,"0")}-${String(weekEnd.getDate()).padStart(2,"0")}`;
@@ -96,7 +120,7 @@ async function refresh() {
   const shorts = jobs.filter(isBad).length;
 
   document.getElementById("metrics").innerHTML = `
-    <div class="metric"><div class="label">Active jobs</div><div class="value">${jobs.length}</div></div>
+    <div class="metric"><div class="label">Jobs in date range</div><div class="value">${jobs.length}</div></div>
     <div class="metric"><div class="label">Due in next 7 days</div><div class="value">${dueWeek}</div></div>
     <div class="metric ${overdue ? "warn" : ""}"><div class="label">Past install, not ready</div><div class="value">${overdue}</div></div>
     <div class="metric"><div class="label">In assembly</div><div class="value">${inAssembly}</div></div>
