@@ -393,3 +393,15 @@ Tablet 1 / HTC AT01:
   - `wifi_sleep_policy=2`
   - `screen_off_timeout=2147483647`
 - Field state: Chrome pinned to Factory Terminal landing page.
+
+## Wireless debugging maintenance button - 2026-10-21T07:59:55.3590100+02:00
+
+Installed and verified on active Factory tablets: Station4 Saw1 FS44BPC01070, Station5 Saw2 FS44BPC00401, Station8 BeadSaw FS44BPC01356. Former Assembly FS44BPC01500 is now Richard's Site tablet and is excluded.
+
+1. Swipe down twice from the top. Wireless debugging is the first Quick Settings button.
+2. If Off, tap to enable it and accept Android's network prompt if shown. If On, leave it on.
+3. Press and hold to open Wireless debugging settings directly. Factory Wi-Fi and the maintenance PC are still required.
+
+All3 long-press destinations verified by actual Android UI XML (Use wireless debugging); all original tiles retained and existing debugging state1 preserved. Chrome brought back to foreground without opening a URL. No app data, pairing, production service or Sheet changes; reboot persistence not tested.
+
+Reusable setup: node tools/add-wireless-debugging-shortcut.cjs <current-adb-endpoint> <physical-serial>. Discover current endpoints with adb mdns services; the script verifies physical identity against the three-device Factory allowlist, backs up prior tiles/debug state in output/, uses native Developer options UI, and asserts the result. Bounded12second ADB calls; stop if an assertion fails. Adapted from the tested Site script without importing or changing the Site fleet. Per-tablet XML/screenshots/results stay local in output/FS44BPC*-maintenance-*; these are evidence, not a live-state guarantee.
