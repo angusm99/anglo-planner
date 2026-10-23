@@ -60,6 +60,19 @@
   .pill { font-size:11px; font-weight:800; border-radius:5px; padding:2px 6px; color:#fff; }
   .muted { color:var(--muted); } .empty-msg { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:28px; text-align:center; color:var(--muted); }
   footer { color:var(--muted); font-size:12px; margin-top:20px; }
+  .view-tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .calendar-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+  .calendar-scroll { overflow-x:auto; }
+  .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(140px,1fr)); min-width:980px; gap:5px; }
+  .calendar-day { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px; min-height:140px; }
+  .calendar-day.today { border-color:var(--gold); }
+  .calendar-day.outside { opacity:.45; }
+  .calendar-day h3 { margin:0 0 8px; font-size:13px; }
+  .calendar-job { display:block; width:100%; text-align:left; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-left:4px solid var(--todo); border-radius:5px; padding:7px; margin-bottom:6px; cursor:pointer; font:inherit; font-size:12px; }
+  .calendar-job.ready { border-left-color:var(--done); } .calendar-job.blocked { border-left-color:var(--block); }
+  .calendar-job span { display:block; color:var(--muted); }
+  .calendar-view .date-control { display:none; }
+  [hidden] { display:none !important; }
   @media (max-width:640px) { .job { grid-template-columns:1fr; } .cell { width:30px; } .filters { grid-template-columns:1fr; } }
 </style>
 </head>
@@ -78,9 +91,11 @@
   </div>
   <p class="note">Read-only. Statuses come from the Material Planner (synced every few minutes); "who / when" comes from confirmed tablet taps. Change work on the station tablets or in the planner.</p>
 
+  <nav class="view-tabs" aria-label="Manager views"><button class="chip on" id="jobsView" aria-pressed="true">Station jobs</button><button class="chip" id="calendarView" aria-pressed="false">Installation calendar</button></nav>
+  <div class="calendar-controls" id="calendarControls" hidden><button class="chip" id="previousMonth" aria-label="Previous month">←</button><b id="calendarMonth"></b><button class="chip" id="nextMonth" aria-label="Next month">→</button><button class="chip" id="currentMonth">This month</button></div>
   <div class="filters">
-    <label>INSTALL</label><div class="chips" id="when"></div>
-    <label>RANGE</label><div class="range"><label for="from">From</label><input type="date" id="from" required><label for="to">To</label><input type="date" id="to" required><button class="chip" id="applyRange">Apply dates</button></div>
+    <label class="date-control">INSTALL</label><div class="chips date-control" id="when"></div>
+    <label class="date-control">RANGE</label><div class="range date-control"><label for="from">From</label><input type="date" id="from" required><label for="to">To</label><input type="date" id="to" required><button class="chip" id="applyRange">Apply dates</button></div>
     <label>SHOW</label><div class="chips" id="show"></div>
     <label for="find">FIND</label><input type="search" id="find" placeholder="Bizman ref, task, customer or colour">
     <p class="note" id="rangeSummary" role="status"></p>
@@ -110,7 +125,7 @@
 const SHORT = ["PLN","MAT","DSP","SAW1","SAW2","ASM","GLS","BEAD"];
 const WHEN = [["overdue","Overdue"],["today","Today"],["tomorrow","Tomorrow"],["7","Next 7 days"],["14","Next 2 weeks"],["31","Next 31 days"],["all","All ahead"]];
 const SHOW = [["all","All jobs"],["attn","Needs attention"],["notready","Not ready"],["ready","Ready"]];
-const st = { when:"tomorrow", show:"all", station:0, q:"", from:"", to:"", sel:null, data:null };
+const st = { view:"jobs", month:"", when:"tomorrow", show:"all", station:0, q:"", from:"", to:"", sel:null, data:null };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -121,6 +136,7 @@ const unitText = (u) => [["windows","win"],["sliding","sliding"],["hinged","hing
   .filter(([k]) => u[k]).map(([k, l]) => `${u[k]} ${l}`).join(" · ") || "no units";
 
 function inWhen(j) {
+  if (st.view === "calendar") return j.installDate.slice(0,7) === st.month;
   const t = st.data.today;
   if (st.when === "custom") return j.installDate >= st.from && j.installDate <= st.to;
   if (st.when === "overdue") return j.overdue;
@@ -149,13 +165,16 @@ function chips(el, items, key) {
 
 function render() {
   const d = st.data, jobs = visible();
+  document.body.classList.toggle("calendar-view", st.view === "calendar");
+  $("calendarControls").hidden = st.view !== "calendar";
+  for (const view of ["jobs", "calendar"]) { const b=$(view+"View"); b.classList.toggle("on",st.view===view); b.setAttribute("aria-pressed",String(st.view===view)); }
   chips("when", WHEN, "when"); chips("show", SHOW, "show");
   const first = addDays(d.today, -d.window.overdueLookbackDays), last = addDays(d.today, d.window.aheadDays);
   const from = st.when === "custom" ? st.from : st.when === "overdue" ? first : st.when === "tomorrow" ? addDays(d.today,1) : d.today;
   const to = st.when === "custom" ? st.to : st.when === "overdue" ? addDays(d.today,-1) : st.when === "today" ? d.today : st.when === "tomorrow" ? addDays(d.today,1) : st.when === "all" ? last : addDays(d.today,Number(st.when)-1);
   for (const id of ["from","to"]) { $(id).min=first; $(id).max=last; }
   $("from").value=from; $("to").value=to;
-  $("rangeSummary").textContent=`Install dates ${dayName(from)} – ${dayName(to)} (inclusive) · ${jobs.length} jobs${st.station ? " · outstanding at " + d.stations[st.station-1].name : ""}.`;
+  $("rangeSummary").textContent=`${st.view === "calendar" ? "Install month " + st.month : `Install dates ${dayName(from)} – ${dayName(to)} (inclusive)`} · ${jobs.length} jobs${st.station ? " · outstanding at " + d.stations[st.station-1].name : ""}.`;
   $("tJobs").textContent = jobs.length;
   $("tUnits").textContent = jobs.reduce((s, j) => s + j.units.total, 0);
   $("tReady").textContent = jobs.filter((j) => j.ready).length;
@@ -168,6 +187,8 @@ function render() {
       <div class="c">${s.toDo} to do in view${s.blocked ? ` · <em>${s.blocked} blocked</em>` : ""}</div>
       <div class="c">${s.updatesToday ? `${s.updatesToday} today · ${esc(s.operatorsToday.join(", "))}` : `No taps today${s.lastActivityAt ? ` · last ${when(s.lastActivityAt)}` : ""}`}</div></div>`).join("");
   $("stations").onclick = (e) => { const c = e.target.closest(".st"); if (c) { const n = Number(c.dataset.n); st.station = st.station === n ? 0 : n; render(); } };
+
+  if (st.view === "calendar") { renderCalendar(jobs, first, last); return; }
 
   const groups = new Map();
   for (const j of jobs) { const k = j.overdue ? "overdue" : j.installDate; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(j); }
@@ -183,6 +204,28 @@ function render() {
     : `<div class="empty-msg">No jobs${filt} in this view.</div>`;
   $("list").onclick = (e) => { const r = e.target.closest(".job"); if (r) openJob(Number(r.dataset.id)); };
 }
+
+function shiftMonth(month, amount) {
+  const d = new Date(month + "-01T00:00:00"); d.setMonth(d.getMonth()+amount);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+function renderCalendar(jobs, first, last) {
+  const start=st.month+"-01", end=addDays(shiftMonth(st.month,1)+"-01",-1);
+  const offset=(new Date(start+"T00:00:00").getDay()+6)%7;
+  const gridStart=addDays(start,-offset), days=offset+Number(end.slice(-2));
+  $("calendarMonth").textContent=new Date(start+"T00:00:00").toLocaleDateString("en-ZA",{month:"long",year:"numeric"});
+  $("previousMonth").disabled=st.month<=first.slice(0,7); $("nextMonth").disabled=st.month>=last.slice(0,7);
+  $("list").innerHTML=`<div class="calendar-scroll"><div class="calendar-grid">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day=>`<b>${day}</b>`).join("")}${Array.from({length:Math.ceil(days/7)*7},(_,i)=>{
+    const date=addDays(gridStart,i), outside=date.slice(0,7)!==st.month, available=date>=first&&date<=last;
+    const items=outside?[]:jobs.filter(j=>j.installDate===date);
+    return `<section class="calendar-day ${outside?"outside":""} ${date===st.data.today?"today":""}" aria-label="${esc(dayName(date))}"><h3>${Number(date.slice(-2))}${date===st.data.today?" · Today":""}</h3>${!outside&&!available?'<span class="muted">Outside available range</span>':items.map(j=>`<button class="calendar-job ${j.ready?"ready":j.blockers.length||j.openIssues?"blocked":""}" data-id="${j.id}"><b>${esc(j.bizRef)}</b> · ${esc(j.customer)}<span>${esc(j.booking)} · ${j.units.total} units</span><span>${esc(j.jobStatus||"No job status")} · ${j.ready?"Ready":`${j.progress.done}/${j.progress.needed} stations done`}</span></button>`).join("")}</section>`;
+  }).join("")}</div></div>`;
+  $("list").onclick=e=>{const b=e.target.closest(".calendar-job");if(b)openJob(Number(b.dataset.id));};
+}
+for (const view of ["jobs","calendar"]) $(view+"View").onclick=()=>{if(!st.data)return;st.view=view;render();};
+$("previousMonth").onclick=()=>{st.month=shiftMonth(st.month,-1);render();};
+$("nextMonth").onclick=()=>{st.month=shiftMonth(st.month,1);render();};
+$("currentMonth").onclick=()=>{st.month=st.data.today.slice(0,7);render();};
 
 async function openJob(id) {
   st.sel = id; render();
@@ -219,7 +262,7 @@ $("find").oninput = (e) => { st.q = e.target.value; render(); };
 
 async function load() {
   try {
-    const r = await fetch("/api/factory-manager"); st.data = await r.json(); render();
+    const r = await fetch("/api/factory-manager"); st.data = await r.json(); if(!st.month)st.month=addDays(st.data.today,1).slice(0,7); render();
     $("status").textContent = `Updated ${new Date().toLocaleTimeString("en-ZA", { hour:"2-digit", minute:"2-digit" })}`;
     $("foot").textContent = `Available install dates: last ${st.data.window.overdueLookbackDays} days to ${st.data.window.aheadDays} days ahead. Finished past jobs are excluded; this is a current-work view, not a completed-job archive. Tablet updates today always refer to today.`;
   } catch { $("status").textContent = "Cannot reach the Factory Terminal server — retrying"; }
