@@ -1,9 +1,9 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
-test('operator confirmation shows station jobs above compact capture; SCHEDULE still opens full board',()=>{
+test('operator confirmation shows compact capture above station jobs; SCHEDULE still opens full board',()=>{
  const station=fs.readFileSync('public/station.html','utf8');
  assert.match(station,/id="scheduleBtn".*onclick="openSchedule\(\)"/);
  const confirmation=station.slice(station.indexOf('async function confirmOperator'),station.indexOf('function openSchedule'));
- assert.doesNotMatch(confirmation,/location.href/);assert.match(confirmation,/stationSchedule.*src=.*\/board\//);assert.ok(station.indexOf('id="stationWork"')<station.indexOf('id="refForm"'));
+ assert.doesNotMatch(confirmation,/location.href/);assert.match(confirmation,/stationSchedule.*src=.*\/board\//);assert.ok(station.indexOf('id="refForm"')<station.indexOf('id="stationWork"'));
  assert.match(station,/function openSchedule\(\)/);
  assert.match(station,/sessionStorage.setItem\(`board-operator-/);
  const cover=fs.readFileSync('public/cover.html','utf8');assert.match(cover,/location.href = "\/foreman-board"/);assert.doesNotMatch(cover,/id="jobBoard"/);
