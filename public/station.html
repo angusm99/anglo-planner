@@ -42,6 +42,11 @@ button.big.redo-btn:active {
   color: var(--accent);
   background: var(--accent-dim);
 }
+#stationWork { margin-bottom:20px; }
+#stationWork iframe { display:block; width:100%; height:650px; border:0; }
+.manual-update { border-top:2px solid var(--accent); padding-top:14px; }
+.manual-update .ref { font-size:18px; min-height:52px; }
+.manual-update #refForm .big { min-height:52px; font-size:18px; }
 </style>
 </head>
 <body>
@@ -85,19 +90,22 @@ button.big.redo-btn:active {
   </section>
 
   <section id="scanView" class="card" style="display:none;">
+    <section id="stationWork" hidden><h2>Jobs for this station</h2><iframe id="stationSchedule" title="Station job list and status updates"></iframe></section>
+    <div class="manual-update">
     <div class="aux-actions">
       <button class="theme" id="operatorBack" type="button">← Operator</button>
     </div>
     <h2 style="font-size:17px;margin-bottom:6px;">Scan the job cover, or type the ref</h2>
     <p style="color:var(--muted);font-size:14px;margin-bottom:14px;">Enter one or several Biz Refs/task numbers. Separate them with spaces, commas, semicolons or new lines.</p>
     <form id="refForm" style="display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:10px;align-items:stretch;">
-      <textarea class="ref" id="refInput" autocomplete="off" rows="2" placeholder="C9687 D1738 A1234"></textarea>
+      <textarea class="ref" id="refInput" autocomplete="off" rows="1" placeholder="C9687 D1738 A1234"></textarea>
       <button class="big" type="submit">Go</button>
     </form>
     <div class="queue-status" id="queueStatus"></div>
     <p id="listSheetNotice" style="display:none;margin-top:10px;font-size:13px;"></p>
     <div id="jobList" style="margin-top:8px;display:grid;gap:10px;"></div>
     <button class="big" id="confirmAllBtn" type="button" style="width:100%;min-height:58px;margin-top:14px;display:none;border-color:var(--accent);font-weight:700;">Confirm All</button>
+    </div>
   </section>
 
   <section id="jobView" class="card" style="display:none;">
@@ -290,13 +298,26 @@ async function confirmOperator(name, type) {
   $("scheduleBtn").style.display = [4,5,6,8].includes(stationNum) ? "inline-block" : "none";
   $("operatorView").style.display = "none";
   $("scanView").style.display = "block";
+  if ([4,5,6,8].includes(stationNum)) {
+    sessionStorage.setItem(`board-operator-${stationNum}`,operatorName);
+    $("stationWork").hidden=false;
+    $("stationSchedule").src=`/board/${stationNum}?embedded=1`;
+  }
   renderQueueList();
   if (initialRef && !initialQueued) {
     initialQueued = true;
     lookupRefs([initialRef]);
   }
-  $("refInput").focus();
+  if (initialRef || ![4,5,6,8].includes(stationNum)) $("refInput").focus();
 }
+
+addEventListener("message",e=>{
+  const frame=$("stationSchedule");
+  if(e.origin!==location.origin || e.source!==frame.contentWindow)return;
+  if(e.data?.type==="station-work-arrived"&&operatorName&&typeof e.data.message==="string"){toast(e.data.message.slice(0,300));return;}
+  if(e.data?.type!=="station-board-height")return;
+  const height=Number(e.data.height);if(Number.isFinite(height)&&height>0&&height<30000)frame.style.height=Math.ceil(height)+"px";
+});
 
 function openSchedule() {
   if (!operatorName || ![4,5,6,8].includes(stationNum)) return;

@@ -1,9 +1,9 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
-test('operator confirmation stays on capture; SCHEDULE opens the station board explicitly',()=>{
+test('operator confirmation shows station jobs above compact capture; SCHEDULE still opens full board',()=>{
  const station=fs.readFileSync('public/station.html','utf8');
  assert.match(station,/id="scheduleBtn".*onclick="openSchedule\(\)"/);
  const confirmation=station.slice(station.indexOf('async function confirmOperator'),station.indexOf('function openSchedule'));
- assert.doesNotMatch(confirmation,/location.href|\/board\//);
+ assert.doesNotMatch(confirmation,/location.href/);assert.match(confirmation,/stationSchedule.*src=.*\/board\//);assert.ok(station.indexOf('id="stationWork"')<station.indexOf('id="refForm"'));
  assert.match(station,/function openSchedule\(\)/);
  assert.match(station,/sessionStorage.setItem\(`board-operator-/);
  const cover=fs.readFileSync('public/cover.html','utf8');assert.match(cover,/location.href = "\/foreman-board"/);assert.doesNotMatch(cover,/id="jobBoard"/);
@@ -22,7 +22,7 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
   const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},createElement:()=>new Element(),querySelectorAll:()=>[]};
   let response=null,requests=0;
   let expire;
-  const context=vm.createContext({document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortController,setTimeout:f=>{expire=f;return 0;},clearTimeout:()=>{},setInterval:()=>{}});
+  const context=vm.createContext({URLSearchParams,document,location:{pathname:`/board/${station}`},sessionStorage:{getItem:()=>''},fetch:()=>{requests++;return response?Promise.resolve(response):new Promise(()=>{});},AbortController,setTimeout:f=>{expire=f;return 0;},clearTimeout:()=>{},setInterval:()=>{}});
   vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
   const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
   const completed=station===8?'BEADS+GLASS':station===6?'ALL DONE':'DONE';
@@ -69,4 +69,17 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
   assert.equal(vm.runInContext('saveResults.get(1).state',context),'failed');
   assert.match(vm.runInContext('saveResults.get(1).message',context),/timed out; refresh and check/);
  }
+});
+
+test('new station jobs and moved work days notify; initial load and unchanged refresh stay quiet',()=>{
+ const vm=require('node:vm'),elements=new Map();
+ const get=id=>{if(!elements.has(id))elements.set(id,{hidden:true,textContent:''});return elements.get(id);};
+ const code=fs.readFileSync('public/station-board.js','utf8');
+ const posts=[];const context=vm.createContext({$:get,embedded:true,location:{origin:'http://factory'},parent:{postMessage:m=>posts.push(m)}});
+ vm.runInContext('let knownJobs=null;const arrivingJobs=new Set();'+code.slice(code.indexOf('function trackNewWork('),code.indexOf('async function load(')),context);
+ const run=(jobs)=>vm.runInContext('trackNewWork('+JSON.stringify({jobs})+')',context);
+ run([{id:1,day:'MONDAY',biz_ref:'D1'}]);assert.equal(get('newWork').hidden,true);
+ run([{id:1,day:'MONDAY',biz_ref:'D1'}]);assert.equal(get('newWork').hidden,true);
+ run([{id:1,day:'MONDAY',biz_ref:'D1'},{id:2,day:'MONDAY',biz_ref:'D3319'}]);assert.equal(get('newWork').hidden,false);assert.match(get('newWork').textContent,/D3319/);assert.equal(vm.runInContext('arrivingJobs.has(2)',context),true);assert.equal(posts[0].type,'station-work-arrived');assert.match(posts[0].message,/D3319/);
+ run([{id:1,day:'TUESDAY',biz_ref:'D1'}]);assert.match(get('newWork').textContent,/D1/);assert.equal(vm.runInContext('arrivingJobs.has(2)',context),false);
 });

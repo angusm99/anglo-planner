@@ -2,6 +2,10 @@
 const $=id=>document.getElementById(id), master=location.pathname==="/foreman-board";
 const station=Number(master?new URLSearchParams(location.search).get("station")||4:location.pathname.split("/").pop());
 let board, config, loading=false, editing=null;
+const embedded=!master&&new URLSearchParams(location.search).get("embedded")==="1";
+if(embedded)document.body.classList.add("embedded");
+let knownJobs=null;
+const arrivingJobs=new Set();
 const saveResults=new Map();
 const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):(station===6?["ALL DONE","DONE-NO PW"]:["DONE","DONE-NO PW"]).includes(s);
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
@@ -50,7 +54,7 @@ function render(){
  bar.style.backgroundColor=rows.length?`hsl(${percent*1.2} 65% 25%)`:"#343125";
  bar.setAttribute("role","progressbar");bar.setAttribute("aria-label",`${day}: completed jobs`);bar.setAttribute("aria-valuemin","0");bar.setAttribute("aria-valuemax","100");bar.setAttribute("aria-valuenow",String(percent));section.append(bar);
  if(!rows.length)section.append(el("p","No jobs allocated."));
- for(const j of rows){const row=el("article",undefined,"job");row.append(el("div",j.biz_ref||j.task_no,"ref"));const info=el("div",j.customer);info.append(el("div",`${j.colour||""} · ${j.units??""} units${j.source==="WIP TV"?"":" · "+j.source}${j.issuer?" · Issued by "+j.issuer:""}${j.note?" · "+j.note:""}`,"detail"));row.append(info);const status=el("div",j.status||"QUEUED","status "+(done(j.status)?"done":issue(j.status)?"problem":""));row.append(status);const controls=el("div",undefined,"controls");const select=el("select");select.setAttribute("aria-label","Status for "+(j.biz_ref||j.task_no));for(const v of config.buttons.filter(v=>v!=="REDO")){const o=el("option",v);o.value=v;select.append(o);}select.dataset.job=String(j.id);select.value=selected.get(String(j.id))||config.defaultStatus;
+ for(const j of rows){const row=el("article",undefined,"job"+(arrivingJobs.has(j.id)?" newly-assigned":""));row.append(el("div",j.biz_ref||j.task_no,"ref"));const info=el("div",j.customer);if(arrivingJobs.has(j.id))info.append(el("strong","NEW / MOVED TO THIS WORK DAY","new-label"));info.append(el("div",`${j.colour||""} · ${j.units??""} units${j.source==="WIP TV"?"":" · "+j.source}${j.issuer?" · Issued by "+j.issuer:""}${j.note?" · "+j.note:""}`,"detail"));row.append(info);const status=el("div",j.status||"QUEUED","status "+(done(j.status)?"done":issue(j.status)?"problem":""));row.append(status);const controls=el("div",undefined,"controls");const select=el("select");select.setAttribute("aria-label","Status for "+(j.biz_ref||j.task_no));for(const v of config.buttons.filter(v=>v!=="REDO")){const o=el("option",v);o.value=v;select.append(o);}select.dataset.job=String(j.id);select.value=selected.get(String(j.id))||config.defaultStatus;
  const result=saveResults.get(j.id);
  select.disabled=result?.state==="saving";
  const save=el("button","CONFIRM");save.disabled=!j.id||board.preview||board.wipStale||!!board.wipError||result?.state==="saving";save.onclick=async()=>{try{const a=actor();if(confirm(`${a}: set ${j.biz_ref||j.task_no} to ${select.value}? Normal production cascade applies.`)){save.disabled=true;await act({jobId:j.id,value:select.value});}}catch(e){$("notice").className="disconnected";$("notice").textContent=e.message;}};controls.append(select,save);
@@ -59,7 +63,16 @@ function render(){
  if(result){const message=el("div",result.message,"save-result "+result.state);message.setAttribute("role","status");controls.append(message);}
  if(!j.id)controls.append(el("span","Master job unavailable; ask foreman","problem"));row.append(controls);section.append(row);}$("days").append(section);}
 }
-async function load(){if(loading)return;loading=true;try{if(!config)config=(await api("/api/stations"))[station];const [list,connection]=await Promise.all([api("/api/board?station="+station),api("/api/capabilities")]);board={...list,connection};render();}catch(e){$("notice").className="disconnected";$("notice").textContent="Disconnected · "+e.message;}finally{loading=false;}}
+function trackNewWork(list){
+ const next=new Map(list.jobs.filter(j=>j.id).map(j=>[j.id,j.day]));
+ const added=list.jobs.filter(j=>j.id&&knownJobs!==null&&(!knownJobs.has(j.id)||knownJobs.get(j.id)!==j.day));
+ for(const j of added)arrivingJobs.add(j.id);
+ for(const id of arrivingJobs)if(!next.has(id))arrivingJobs.delete(id);
+ knownJobs=next;
+ if(added.length){$("newWork").textContent="New station work: "+added.map(j=>j.biz_ref||j.task_no).join(", ")+". Review the highlighted jobs below.";$("newWork").hidden=false;if(embedded)parent.postMessage({type:"station-work-arrived",message:$("newWork").textContent},location.origin);}
+ if(!arrivingJobs.size)$("newWork").hidden=true;
+}
+async function load(){if(loading)return;loading=true;try{if(!config)config=(await api("/api/stations"))[station];const [list,connection]=await Promise.all([api("/api/board?station="+station),api("/api/capabilities")]);board={...list,connection};if(!list.wipStale&&!list.wipError)trackNewWork(list);render();}catch(e){$("notice").className="disconnected";$("notice").textContent="Disconnected · "+e.message;}finally{loading=false;}}
 function openAllocation(j){editing=j||null;$("allocationForm").reset();$("allocationError").textContent="";$("job").replaceChildren();$("day").replaceChildren();for(const d of board.days){const o=el("option",d);o.value=d;$("day").append(o);}if(j){const o=el("option",`${j.biz_ref} · ${j.customer}`);o.value=j.id;$("job").append(o);$("day").value=board.days.includes(j.day)?j.day:board.days[0];$("issuer").value=j.issuer||"";$("note").value=j.note||"";}$("allocation").showModal();}
 $("find").onclick=async()=>{ $("find").disabled=true; $("allocationError").textContent="Finding job…"; try{const q=$("search").value.trim();if(q.length<2)throw Error("Enter at least two characters");const jobs=await api("/api/search?q="+encodeURIComponent(q));$("job").replaceChildren();for(const j of jobs.filter(j=>j.source_tab!=="OFFICE")){const o=el("option",`${j.biz_ref} · ${j.customer} · ${j.source_tab}`);o.value=j.id;$("job").append(o);}if(!$("job").options.length)throw Error("No master planner job found"); $("allocationError").textContent=`Found ${$("job").options.length} matching job(s). Select the correct one below.`;}catch(e){$("allocationError").textContent=e.message;}finally{$("find").disabled=false;}};
 $("search").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("find").click();}});
@@ -67,4 +80,9 @@ $("allocationForm").onsubmit=async e=>{e.preventDefault();try{await api("/api/bo
 $("cancel").onclick=()=>$("allocation").close();$("add").onclick=()=>{if(board)openAllocation();};$("refresh").onclick=load;$("stations").hidden=!master;
 $("login").onclick=async()=>{const password=prompt("Existing Factory Terminal admin password");if(password===null)return;try{await api("/api/board/login",{password});await load();}catch(e){$("notice").textContent=e.message;}};
 try { if(!master) $("actor").value=sessionStorage.getItem(`board-operator-${station}`)||""; } catch (_) {}
-load();setInterval(load,30000);
+load();setInterval(load,15000);
+try{new EventSource("/api/stream").addEventListener("job-updated",()=>{clearTimeout(load.timer);load.timer=setTimeout(load,500);});}catch{}
+if(embedded){
+ const reportHeight=()=>parent.postMessage({type:"station-board-height",height:document.body.offsetHeight+32},location.origin);
+ new ResizeObserver(reportHeight).observe(document.body);
+}
