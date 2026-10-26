@@ -26,7 +26,7 @@ test('dashboard connection colours, completion bars and save outcomes reflect ac
   vm.runInContext(fs.readFileSync('public/station-board.js','utf8'),context);
   const data={name:'Saw 2',station,days:['TODAY'],updated:'Updated',wipReadAt:new Date().toISOString(),jobs:[],connection:{sheet:true,health:{status:'ready'}}};
   const completed=station===8?'BEADS+GLASS':station===6?'ALL DONE':'DONE';
-  for(const [statuses,percent]of [[['QUEUED','QUEUED'],0],[[completed,'QUEUED'],50],[[completed,completed],100],[[],0]]){
+  for(const [statuses,percent]of [[['QUEUED','QUEUED'],0],[[completed,'QUEUED'],50],[[completed,completed],100],[['O','0'],100],[[' o ','QUEUED'],50],[[0,completed],100],[[],0]]){
    data.jobs=statuses.map((status,i)=>({id:i+1,day:'TODAY',status,biz_ref:`D${i}`,customer:'Customer',source:'WIP TV',units:1}));
    vm.runInContext(`board=${JSON.stringify(data)};config={buttons:['DONE'],defaultStatus:'DONE'};render();`,context);
    const bar=elements.get('days').children[0].children[1];

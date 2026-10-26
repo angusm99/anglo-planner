@@ -7,7 +7,10 @@ if(embedded)document.body.classList.add("embedded");
 let knownJobs=null;
 const arrivingJobs=new Set();
 const saveResults=new Map();
-const done=s=>station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):(station===6?["ALL DONE","DONE-NO PW"]:["DONE","DONE-NO PW"]).includes(s);
+const done=value=>{
+ const s=String(value??"").trim().toUpperCase();
+ return ["O","0"].includes(s)||(station===8?(s==="DONE"||/BEADS|ALL READY/.test(s)):(station===6?["ALL DONE","DONE-NO PW"]:["DONE","DONE-NO PW"]).includes(s));
+};
 const issue=s=>/SHORT|DEFECT|REDO/.test(s);
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 async function api(url,body){
