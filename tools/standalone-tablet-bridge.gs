@@ -8,10 +8,9 @@
  *   1. Replace the FACTORY TERMINAL web-app Code.gs with this file.
  *   2. Preserve the existing PLANNER_TOKEN Script Property.
  *   3. Deploy a new web-app version (execute as owner; access Anyone).
- *   4. Optional spreadsheet fallback: run installIssueLogTrigger() once and
- *      authorise it if ticking ISSUE LOG should also complete a REPICK. The
- *      normal floor workflow uses Confirm REPICK complete on the Station 3
- *      tablet, so the trigger is not required for tablet completion.
+ *   4. Run installIssueLogTrigger() once from the editor and authorise it.
+ *      This uses a named installable trigger and does NOT conflict with the
+ *      plannerCore.gs onEdit(e) function.
  */
 
 var SPREADSHEET_ID = '111LJiZGBg8_HaT3ruWWx9RmY_UTheTUzFFYcCOj0Umw';
@@ -107,21 +106,15 @@ function doPost(e) {
 }
 
 function _writeStationUpdate_(body) {
-  var sheet = _ss_().getSheetByName(body.tab);
-  if (!sheet) return _json_({ ok: false, error: 'no tab: ' + body.tab });
-  var row = _findRow_(sheet, body.task_no, body.biz_ref);
-  if (row < 0) return _json_({ ok: false, error: 'row not found' });
-
   var updates = body.updates || {};
-  var wrote = [];
+  var cells = [], wrote = [];
   Object.keys(updates).forEach(function (field) {
     var col = COL[field];
-    if (col) {
-      sheet.getRange(row, col).setValue(_u_(updates[field]));
-      wrote.push(field);
-    }
+    if (col) { cells.push({ col: col, value: _u_(updates[field]) }); wrote.push(field); }
   });
-  return _json_({ ok: true, row: row, wrote: wrote });
+  var at = _writeVerified_(body.tab, body.task_no, body.biz_ref, cells);
+  if (at.error) return _json_({ ok: false, error: at.error });
+  return _json_({ ok: true, row: at.row, tab: at.tab, wrote: wrote });
 }
 
 function _appendIssue_(body) {
@@ -134,10 +127,8 @@ function _appendIssue_(body) {
     return _json_({ ok: false, error: 'invalid issue_log payload' });
   }
 
-  var planner = _ss_().getSheetByName(body.tab);
-  if (!planner) return _json_({ ok: false, error: 'no tab: ' + body.tab });
-  var plannerRow = _findRow_(planner, body.task_no, bizRef);
-  if (plannerRow < 0) return _json_({ ok: false, error: 'row not found' });
+  var found = _locate_(body.tab, body.task_no, bizRef);
+  if (found.error) return _json_({ ok: false, error: found.error });
 
   // FACTORY TERMINAL is standalone, so getDocumentLock() returns null.
   // A script lock safely serialises concurrent web-app issue submissions.
@@ -159,16 +150,18 @@ function _appendIssue_(body) {
     }
 
     var repick = 'REPICK' + cycle;
-    var wrote = [];
+    var cells = [], wrote = [];
     // Stations 1–7 have their own sheet columns. Station 8 (Bead Saw) uses
     // Job Status for normal work, but REDO must only notify Despatch via REPICK.
     if (station !== 3 && station <= 7) {
-      planner.getRange(plannerRow, COL['s' + station]).setValue('REDO');
+      cells.push({ col: COL['s' + station], value: 'REDO' });
       wrote.push('s' + station);
     }
-    planner.getRange(plannerRow, COL.s3).setValue(repick);
+    cells.push({ col: COL.s3, value: repick });
     wrote.push('s3');
-    return _json_({ ok: true, row: row, planner_row: plannerRow, cycle: cycle, wrote: wrote });
+    var at = _writeVerified_(body.tab, body.task_no, bizRef, cells);
+    if (at.error) return _json_({ ok: false, error: at.error, row: row });
+    return _json_({ ok: true, row: row, planner_row: at.row, planner_tab: at.tab, cycle: cycle, wrote: wrote });
   } finally {
     lock.releaseLock();
   }
@@ -186,13 +179,10 @@ function _findIssueRow_(sheet, bizRef, unit, cycle) {
 function _completeRepick_(body) {
   var cycle = Number(body.cycle);
   if (!cycle || cycle < 1) return _json_({ ok: false, error: 'invalid cycle' });
-  var sheet = _ss_().getSheetByName(body.tab);
-  if (!sheet) return _json_({ ok: false, error: 'no tab: ' + body.tab });
-  var row = _findRow_(sheet, body.task_no, body.biz_ref);
-  if (row < 0) return _json_({ ok: false, error: 'row not found' });
-  sheet.getRange(row, COL.s3).setValue('REDONE' + cycle);
+  var at = _writeVerified_(body.tab, body.task_no, body.biz_ref, [{ col: COL.s3, value: 'REDONE' + cycle }]);
+  if (at.error) return _json_({ ok: false, error: at.error });
   _markIssueDone_(_u_(body.biz_ref), _u_(body.unit), cycle);
-  return _json_({ ok: true, row: row, wrote: ['s3'] });
+  return _json_({ ok: true, row: at.row, tab: at.tab, wrote: ['s3'] });
 }
 
 function installIssueLogTrigger() {
@@ -267,6 +257,69 @@ function _issueSheet_() {
     throw new Error('ISSUE LOG headers do not match bridge v2');
   }
   return sheet;
+}
+
+// Planner Tools > Send marked jobs (bound project) moves whole job rows between
+// planner tabs. A tablet's cached tab can then be stale for ~10 min, and a move
+// can land between this script's row lookup and its write. LockService only
+// serialises one project, so the bridge looks a job up in the cached tab first,
+// then BY TASK NUMBER across every planner tab, and only then falls back to the
+// Bizman ref in the cached tab (the original behaviour). After writing it
+// re-reads column A; if the row no longer holds the task, the cells it wrote into
+// the now-blank row are cleared and the write is made once more at the job's
+// new location. (2026-10-26, for Production Send.)
+function _locate_(tab, taskNo, bizRef) {
+  var ss = _ss_();
+  var task = _s_(taskNo);
+  var cached = ss.getSheetByName(tab);
+  if (cached && task) {
+    var r = _findTaskRow_(cached, task);
+    if (r > 0) return { sheet: cached, row: r, by: 'task' };
+  }
+  if (task) {
+    var sheets = ss.getSheets();
+    for (var k = 0; k < sheets.length; k++) {
+      var name = sheets[k].getName();
+      if (name === tab || !_isPlannerTab_(name)) continue;
+      var moved = _findTaskRow_(sheets[k], task);
+      if (moved > 0) return { sheet: sheets[k], row: moved, by: 'task' };
+    }
+  }
+  if (!cached) return { error: 'no tab: ' + tab };
+  var byRef = _findRow_(cached, '', bizRef);
+  return byRef > 0 ? { sheet: cached, row: byRef, by: 'ref' } : { error: 'row not found' };
+}
+
+function _findTaskRow_(sheet, task) {
+  var last = sheet.getLastRow();
+  if (last < DATA_START_ROW) return -1;
+  var ids = sheet.getRange(DATA_START_ROW, 1, last - DATA_START_ROW + 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) if (_s_(ids[i][0]) === task) return DATA_START_ROW + i;
+  return -1;
+}
+
+// Verify with the key that found the row: column A for a task match, the D/N/W
+// Bizman ref for a ref match.
+function _stillHolds_(at, task, ref) {
+  var v = at.sheet.getRange(at.row, 1, 1, 23).getValues()[0];
+  if (at.by === 'task') return _s_(v[0]) === task ? 'yes' : (_s_(v[0]) ? 'other' : 'blank');
+  if (_u_(v[3]) === ref || _u_(v[13]) === ref || _u_(v[22]) === ref) return 'yes';
+  return v.some(function (x) { return _s_(x); }) ? 'other' : 'blank';
+}
+
+function _writeVerified_(tab, taskNo, bizRef, cells) {
+  var task = _s_(taskNo), ref = _u_(bizRef);
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var at = _locate_(tab, taskNo, bizRef);
+    if (at.error) return at;
+    cells.forEach(function (c) { at.sheet.getRange(at.row, c.col).setValue(c.value); });
+    var state = _stillHolds_(at, task, ref);
+    if (state === 'yes') return { row: at.row, tab: at.sheet.getName() };
+    if (state === 'other') return { error: 'row changed during write (' + at.sheet.getName() + ' R' + at.row + '); check before retry' };
+    // The row was emptied by a move mid-write: undo our stray values, then find the job again.
+    cells.forEach(function (c) { at.sheet.getRange(at.row, c.col).setValue(''); });
+  }
+  return { error: 'job moved twice during the write; retry' };
 }
 
 function _findRow_(sheet, taskNo, bizRef) {
