@@ -47,13 +47,20 @@ button.big.redo-btn:active {
 .manual-update { margin-bottom:14px; }
 .manual-update .ref { font-size:18px; min-height:52px; }
 .manual-update #refForm .big { min-height:52px; font-size:18px; }
+.operator-line { display:flex; align-items:center; gap:14px; }
+#stationProgress { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); }
+#stationProgress[hidden] { display:none; }
+#stationProgress svg { width:74px; height:48px; flex:none; }
+#progressCount { max-width:65px; line-height:1.2; }
 </style>
 </head>
 <body>
 <header class="app">
   <div class="brand">
     <div class="mark" id="stNum">·</div>
-    <div><h1 id="stName">Station</h1><div class="sub" id="stWho">Choose an operator to begin</div></div>
+    <div><h1 id="stName">Station</h1><div class="operator-line"><div class="sub" id="stWho">Choose an operator to begin</div><div id="stationProgress" role="img" aria-label="Station progress loading" hidden>
+      <svg viewBox="0 0 100 65" aria-hidden="true"><path d="M 12 48 A 38 38 0 0 1 88 48" fill="none" stroke="var(--border)" stroke-width="8"/><path id="progressArc" d="M 12 48 A 38 38 0 0 1 88 48" fill="none" stroke="var(--done)" stroke-width="8" pathLength="100" stroke-dasharray="0 100"/><g id="progressNeedle" transform="rotate(-90 50 48)"><path d="M 47 48 L 50 16 L 53 48 Z" fill="var(--accent)"/></g><circle cx="50" cy="48" r="4" fill="var(--accent)"/><text id="progressPercent" x="50" y="63" text-anchor="middle" fill="currentColor" font-size="14">—</text></svg><span id="progressCount">Loading…</span>
+    </div></div></div>
   </div>
   <div class="right">
     <button class="theme" onclick="location.href='/?select=1'">← Home</button>
@@ -294,6 +301,7 @@ async function confirmOperator(name, type) {
   operatorType = type;
   localStorage.setItem(`anglo-operator-${stationNum}`, JSON.stringify({ name: clean, type }));
   $("stWho").textContent = `Operator: ${clean}`;
+  $("stationProgress").hidden=true;
   $("changeOperator").style.display = "inline-block";
   $("scheduleBtn").style.display = [4,5,6,8].includes(stationNum) ? "inline-block" : "none";
   $("operatorView").style.display = "none";
@@ -314,10 +322,23 @@ async function confirmOperator(name, type) {
 addEventListener("message",e=>{
   const frame=$("stationSchedule");
   if(e.origin!==location.origin || e.source!==frame.contentWindow)return;
+  if(e.data?.type==="station-board-progress"&&operatorName){updateStationProgress(e.data);return;}
   if(e.data?.type==="station-work-arrived"&&operatorName&&typeof e.data.message==="string"){toast(e.data.message.slice(0,300));return;}
   if(e.data?.type!=="station-board-height")return;
   const height=Number(e.data.height);if(Number.isFinite(height)&&height>0&&height<30000)frame.style.height=Math.ceil(height)+"px";
 });
+
+function updateStationProgress({complete,total,ready}) {
+  if(!Number.isInteger(complete)||!Number.isInteger(total)||complete<0||complete>total)return;
+  const available=ready===true, percent=total?Math.round(100*complete/total):0;
+  $("stationProgress").hidden=false;
+  $("progressArc").setAttribute("stroke-dasharray",`${available?percent:0} 100`);
+  $("progressNeedle").setAttribute("transform",`rotate(${-90+percent*1.8} 50 48)`);
+  $("progressNeedle").style.visibility=available&&total?"visible":"hidden";
+  $("progressPercent").textContent=available&&total?percent+"%":"—";
+  $("progressCount").textContent=available?`${complete}/${total} jobs complete`:"Board unavailable";
+  $("stationProgress").setAttribute("aria-label",available?`${complete} of ${total} listed station jobs complete${total?`, ${percent}%`:""}`:"Station progress unavailable: board disconnected or stale");
+}
 
 function openSchedule() {
   if (!operatorName || ![4,5,6,8].includes(stationNum)) return;
@@ -338,6 +359,7 @@ $("changeOperator").onclick = () => {
   cancelConfirmation();
   operatorName = "";
   operatorType = "";
+  $("stationProgress").hidden=true;
   $("changeOperator").style.display = "none";
   $("scheduleBtn").style.display = "none";
   $("stWho").textContent = "Choose an operator to continue";
