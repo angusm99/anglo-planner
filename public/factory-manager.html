@@ -72,6 +72,11 @@
   .calendar-job.ready { border-left-color:var(--done); } .calendar-job.blocked { border-left-color:var(--block); }
   .calendar-job span { display:block; color:var(--muted); }
   .calendar-view .date-control { display:none; }
+  .allocation { border:1px solid var(--line); border-radius:8px; padding:10px; margin:12px 0; }
+  .allocation summary { cursor:pointer; color:var(--gold); font-weight:700; }
+  .allocation label { display:block; margin:8px 0; font-size:13px; }
+  .allocation select, .allocation input { display:block; width:100%; padding:9px; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .allocation button { margin:6px 4px 0 0; }
   [hidden] { display:none !important; }
   @media (max-width:640px) { .job { grid-template-columns:1fr; } .cell { width:30px; } .filters { grid-template-columns:1fr; } }
 </style>
@@ -89,7 +94,7 @@
     <a href="/station-log" target="_blank">Station log ↗</a>
     <a href="/manager" target="_blank">Command centre ↗</a>
   </div>
-  <p class="note">Read-only. Statuses come from the Material Planner (synced every few minutes); "who / when" comes from confirmed tablet taps. Change work on the station tablets or in the planner.</p>
+  <p class="note">Statuses come from the Material Planner; "who / when" comes from confirmed tablet taps. Send to station allocates work to a station's SCHEDULE board. It does not change install dates or production statuses.</p>
 
   <nav class="view-tabs" aria-label="Manager views"><button class="chip on" id="jobsView" aria-pressed="true">Station jobs</button><button class="chip" id="calendarView" aria-pressed="false">Installation calendar</button></nav>
   <div class="calendar-controls" id="calendarControls" hidden><button class="chip" id="previousMonth" aria-label="Previous month">←</button><b id="calendarMonth"></b><button class="chip" id="nextMonth" aria-label="Next month">→</button><button class="chip" id="currentMonth">This month</button></div>
@@ -232,12 +237,21 @@ async function openJob(id) {
   const p = $("panel"); p.hidden = false; $("layout").classList.add("open"); $("backdrop").hidden = innerWidth >= 1200;
   p.innerHTML = '<p class="muted">Loading job…</p>';
   const r = await fetch(`/api/factory-manager/job?id=${id}`); const d = await r.json();
+  if (st.sel !== id) return;
   if (d.error) { p.innerHTML = `<p>${esc(d.error)}</p>`; return; }
   const j = d.job, u = j.units, color = { done:"var(--done)", todo:"var(--todo)", blocked:"var(--block)", na:"#444", empty:"#333" };
   p.innerHTML = `<button class="close" id="close">Close ✕</button><h3>${esc(j.bizRef)}</h3>
     <div>${esc(j.customer)}</div>
     ${/^https:\/\/anglowindows\.myworkpool\.net\//.test(j.workpoolUrl) ? `<p><a class="wp" href="${esc(j.workpoolUrl)}" target="_blank" rel="noopener">Open parent task ${esc(j.taskNo)} in WorkPool ↗</a></p>` : '<p class="muted">No WorkPool task number on this planner row.</p>'}
     <div class="muted">Task ${esc(j.taskNo || "—")} · install ${esc(j.installDate || "—")} · ${esc(j.booking || "")} · ${esc(j.colour)}</div>
+    <details class="allocation"><summary>Send to station…</summary><form id="sendForm">
+      <label for="sendStation">Station<select id="sendStation" required><option value="">Choose station…</option>${[4,5,6,8].map(n=>`<option value="${n}">${esc(j.stations[n-1].name)}</option>`).join("")}</select></label>
+      <label for="sendDay">Station work day<select id="sendDay" required disabled><option value="">Choose a station first</option></select></label>
+      <label for="sendActor">Manager name<input id="sendActor" required maxlength="100" autocomplete="name"></label>
+      <p class="note">Adds this job to the selected station's SCHEDULE board. Other station allocations stay in place.</p>
+      <button type="button" class="chip" id="sendLogin" hidden>Sign in to send</button><button type="submit" class="chip" id="sendJob" disabled>Send to station</button>
+      <p id="sendResult" role="status" aria-live="polite"></p>
+    </form></details>
     <table><tr><th>Windows</th><th>Sliding</th><th>Hinged</th><th>Fold</th><th>Palace</th><th>Specials</th><th>Total</th></tr>
       <tr><td>${u.windows}</td><td>${u.sliding}</td><td>${u.hinged}</td><td>${u.fold}</td><td>${u.palace}</td><td>${u.specials}</td><td><b>${u.total}</b></td></tr></table>
     <table><tr><th>Station</th><th>Status</th><th>Last tablet change</th></tr>
@@ -247,6 +261,56 @@ async function openJob(id) {
     <h4>Tablet history</h4>${d.events.length ? `<table><tr><th>When</th><th>Who</th><th>Change</th></tr>${d.events.map((e) => `<tr><td>${when(e.created_at)}</td><td>${esc(e.actor)}${e.station ? ` <span class="muted">S${e.station}</span>` : ""}</td>
       <td>${e.field === "confirm-noop" ? `<span class="muted">re-confirmed ${esc(e.new_value)}</span>` : `${esc(e.field.toUpperCase())}: ${esc(e.old_value || "—")} → <b>${esc(e.new_value)}</b>`}</td></tr>`).join("")}</table>` : '<p class="muted">No tablet taps recorded for this job — statuses were set in the planner.</p>'}`;
   $("close").onclick = closeJob;
+  setupAllocation(j);
+}
+async function boardRequest(url, body) {
+  const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),body?90000:30000);
+  try {
+    const r=await fetch(url,{signal:controller.signal,...(body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{})});
+    const result=await r.json(); if(!r.ok)throw Error(result.error||"Request failed"); return result;
+  } catch(e) { if(e.name==="AbortError")throw Error(body?"Response timed out. Refresh the station board to check before retrying.":"Station board timed out; try again."); throw e; }
+  finally {clearTimeout(timer);}
+}
+function setupAllocation(job) {
+  const form=$("sendForm"), station=$("sendStation"), day=$("sendDay"), name=$("sendActor"), send=$("sendJob"), login=$("sendLogin"), result=$("sendResult");
+  let board=null, saving=false, request=0;
+  const current=()=>st.sel===job.id && $("sendForm")===form;
+  async function readBoard() {
+    const ticket=++request; board=null;send.disabled=true;day.disabled=true;login.hidden=true;day.innerHTML='<option value="">Loading work days…</option>'; result.textContent="";
+    if(!station.value){day.innerHTML='<option value="">Choose a station first</option>';return;}
+    try {
+      const data=await boardRequest('/api/board?station='+station.value);
+      if(!current()||ticket!==request)return;
+      if(data.preview||data.wipStale||data.wipError)throw Error(data.wipError||"Station board is not ready; refresh WIP TV before sending.");
+      if(!data.days?.length)throw Error("No station work days available");
+      const today=new Date(st.data.today+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}).toUpperCase();
+      board=data;day.innerHTML='<option value="">Choose work day…</option>'+data.days.map(d=>`<option value="${esc(d)}"${d.toUpperCase().endsWith(today)?' selected':''}>${esc(d)}</option>`).join("");day.disabled=false;
+      login.hidden=data.foreman;send.disabled=!data.foreman;
+      result.textContent=data.foreman?"Choose the station work day, then send.":"Sign in with the existing Factory Terminal admin password to send jobs.";
+    } catch(e){if(current()&&ticket===request)result.textContent=e.message;}
+  }
+  station.onchange=readBoard;
+  login.onclick=async()=>{
+    const password=prompt("Existing Factory Terminal admin password");if(password===null)return;
+    login.disabled=true;
+    try{await boardRequest('/api/board/login',{password});if(current())await readBoard();}
+    catch(e){if(current())result.textContent=e.message;}
+    finally{login.disabled=false;}
+  };
+  form.onsubmit=async e=>{
+    e.preventDefault();if(saving||!board?.foreman||!form.reportValidity())return;
+    const actor=name.value.trim();if(!actor){result.textContent="Enter the manager's name.";return;}
+    const target=Number(station.value), workDay=day.value;
+    if(![4,5,6,8].includes(target)||!board.days.includes(workDay))return;
+    saving=true;send.disabled=true;station.disabled=true;day.disabled=true;name.disabled=true;result.textContent="Sending…";
+    try{
+      await boardRequest('/api/board/allocate',{station:target,jobId:job.id,action:'allocate',day:workDay,actor,issuer:actor,reason:'MANUAL ISSUE'});
+      const check=await boardRequest('/api/board?station='+target);
+      if(!check.jobs.some(j=>j.id===job.id&&j.day===workDay))throw Error("Allocation was accepted but could not be verified. Check the station board before retrying.");
+      if(current())result.innerHTML=`Sent to ${esc(job.stations[target-1].name)} · ${esc(workDay)}. <a class="wp" href="/board/${target}" target="_blank" rel="noopener">Open station SCHEDULE ↗</a>`;
+    }catch(e){if(current())result.textContent="Not confirmed: "+e.message;}
+    finally{saving=false;send.disabled=false;station.disabled=false;day.disabled=false;name.disabled=false;}
+  };
 }
 function closeJob() { st.sel = null; $("panel").hidden = true; $("backdrop").hidden = true; $("layout").classList.remove("open"); render(); }
 $("backdrop").onclick = closeJob;
