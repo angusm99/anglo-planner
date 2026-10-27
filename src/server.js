@@ -11,6 +11,7 @@ const { stationLog } = require("./stationLog");
 const { managerSummary } = require("./managerSummary");
 const { factoryManager, factoryJobDetail } = require("./factoryManager");
 const { createBoard } = require("./stationBoard");
+const readCuttingList = require("./cuttingList").cuttingList;
 const { getWip,readMasterStatus,readMasterJobs } = require("./wipTv");
 const crypto = require("node:crypto");
 const {
@@ -35,6 +36,7 @@ for (const level of ["log", "error"]) {
 const PORT = process.env.PORT || 3300;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const db = open();
+const getCuttingList = readCuttingList(db);
 let redoBridgeReady = false;
 let sheetCheckedAt = null; // last time Google actually answered a capability check
 const redoInFlight = new Set();
@@ -559,6 +561,12 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   try {
+    const cuttingTask=/^\/api\/cutting-list\/(\d{1,12})$/.exec(p);
+    if(cuttingTask && req.method === "GET"){
+      res.setHeader("Cache-Control","no-store");
+      try{return json(res,200,await getCuttingList(cuttingTask[1]));}
+      catch(error){return json(res,404,{error:error.message});}
+    }
     const stationTablet = /(?:^|;\s*)factoryCoverStation=(4|5|6|8)(?:;|$)/.test(req.headers.cookie || "");
     if (stationTablet && (p === "/foreman-board" || p === "/api/board/login")) {
       return json(res,403,{error:"Foreman controls are available on the master tablet"});
