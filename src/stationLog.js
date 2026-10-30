@@ -14,11 +14,11 @@ function stationLog(db, stationNum, days) {
     SELECT e.created_at, e.actor, e.field, e.old_value, e.new_value, e.source,
            j.biz_ref, j.customer, j.task_no
     FROM events e JOIN jobs j ON j.id = e.job_id
-    WHERE (e.source = ? OR e.source = ?)
+    WHERE e.source IN (?, ?, ?)
       AND e.created_at >= datetime('now', 'localtime', '-' || ? || ' days')
     ORDER BY e.id DESC
     LIMIT 500
-  `).all(`station-${num}`, `redo-station-${num}`, window);
+  `).all(`station-${num}`, `station-${num}-board`, `redo-station-${num}`, window);
 
   return { station: { number: num, name: st.name, responsible: st.responsible }, days: window, rows };
 }

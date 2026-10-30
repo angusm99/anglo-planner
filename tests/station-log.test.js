@@ -36,6 +36,13 @@ test("station log returns only this station's events, newest first", () => {
   assert.strictEqual(result.rows[0].new_value, "REDO"); // most recent first
 });
 
+test("station log includes station board taps", () => {
+  const db = makeDb();
+  db.prepare(`INSERT INTO events (job_id, field, old_value, new_value, actor, source)
+              VALUES (1, 's5', 'JOB PICKED', 'DONE', 'Richard', 'station-5-board')`).run();
+  assert.strictEqual(stationLog(db, 5, 30).rows.length, 1);
+});
+
 test("station log rejects an unknown station number", () => {
   const db = makeDb();
   assert.strictEqual(stationLog(db, 99, 30).error, "Invalid station");
